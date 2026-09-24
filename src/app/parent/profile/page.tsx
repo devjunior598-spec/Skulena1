@@ -1,0 +1,3 @@
+import { PageHeading } from "@/components/portal/page-heading";
+import { requireAccount } from "@/lib/auth";
+export default async function ParentProfilePage() { const { user, profile } = await requireAccount(["parent"]); return <><PageHeading eyebrow="Your account" title="Profile" description="The details associated with your private parent account." /><dl className="mt-8 max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-sm"><dt className="font-bold text-slate-500">Name</dt><dd className="mt-1 text-base font-extrabold text-[#0e2946]">{profile.full_name || "Not added"}</dd><dt className="mt-5 font-bold text-slate-500">Email</dt><dd className="mt-1 text-base font-semibold text-[#0e2946]">{user.email}</dd></dl></>; }

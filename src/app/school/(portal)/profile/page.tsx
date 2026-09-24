@@ -1,0 +1,2 @@
+import Link from "next/link"; import { Building2 } from "lucide-react"; import { SchoolSectionPlaceholder } from "@/components/school/section-placeholder"; import { Button } from "@/components/ui/button";
+export default function Page() { return <SchoolSectionPlaceholder icon={Building2} title="School profile" description="Manage the core information families see after publication." empty="Continue the guided school setup to add your profile information."><Button asChild><Link href="/for-schools/register">Continue setup</Link></Button></SchoolSectionPlaceholder>; }

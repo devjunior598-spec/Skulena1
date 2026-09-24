@@ -1,0 +1,18 @@
+"use client";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FileLock2, LoaderCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/client";
+import { registerDocumentRecord } from "@/app/school/(portal)/media/actions";
+const allowed = ["application/pdf", "image/jpeg", "image/png"] as const;
+export function DocumentUploader({ schoolId }: { schoolId: string }) {
+  const fileRef = useRef<HTMLInputElement>(null); const router = useRouter(); const [type, setType] = useState("registration"); const [title, setTitle] = useState(""); const [busy, setBusy] = useState(false); const [message, setMessage] = useState("");
+  async function upload() { const file = fileRef.current?.files?.[0]; if (!file || title.trim().length < 2) { setMessage("Add a title and choose a document."); return; } if (!allowed.includes(file.type as typeof allowed[number])) { setMessage("Use PDF, JPEG or PNG."); return; } if (file.size > 20971520) { setMessage("Documents must be 20 MB or smaller."); return; }
+    setBusy(true); setMessage(""); const supabase = createClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) { setBusy(false); setMessage("Sign in again before uploading."); return; }
+    const extension = file.type === "application/pdf" ? "pdf" : file.type === "image/png" ? "png" : "jpg"; const storagePath = `${schoolId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+    const { error } = await supabase.storage.from("school-documents").upload(storagePath, file, { contentType: file.type }); if (error) { setBusy(false); setMessage("Upload failed."); return; }
+    const result = await registerDocumentRecord({ schoolId, documentType: type, title, storagePath, mimeType: file.type, byteSize: file.size }); if (result.error) { await supabase.storage.from("school-documents").remove([storagePath]); setMessage(result.error); } else { setMessage("Document saved privately."); setTitle(""); if (fileRef.current) fileRef.current.value = ""; router.refresh(); } setBusy(false);
+  }
+  return <div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><FileLock2 className="size-5 text-emerald-700" /><h2 className="font-extrabold text-[#0e2946]">Private supporting document</h2></div><p className="mt-2 text-sm leading-6 text-slate-500">Files use a private bucket and are never linked from public profiles.</p><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold">Document type<select value={type} onChange={(event) => setType(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-300 px-3"><option value="registration">Registration document</option><option value="government_approval">Government approval / licence</option><option value="proof_of_address">Proof of address</option><option value="accreditation">Accreditation</option><option value="other">Other</option></select></label><label className="text-sm font-bold">Title<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 h-11 w-full rounded-xl border border-slate-300 px-3" /></label></div><label className="mt-4 block text-sm font-bold">File<input ref={fileRef} type="file" accept="application/pdf,image/jpeg,image/png" className="mt-2 block w-full text-sm" /></label>{message && <p role="status" className="mt-3 text-sm font-semibold text-slate-600">{message}</p>}<Button type="button" onClick={upload} disabled={busy} className="mt-4">{busy ? <LoaderCircle className="size-4 animate-spin" /> : <FileLock2 className="size-4" />}{busy ? "Uploading…" : "Upload privately"}</Button></div>;
+}

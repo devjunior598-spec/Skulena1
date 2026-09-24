@@ -1,0 +1,2 @@
+import { Users } from "lucide-react"; import { SchoolSectionPlaceholder } from "@/components/school/section-placeholder";
+export default function Page() { return <SchoolSectionPlaceholder icon={Users} title="Team" description="Membership roles keep owner, administrator, admissions, editor and viewer access separate." empty="The school owner is the only team member until invitations are enabled." />; }
