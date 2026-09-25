@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Images, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { mediaCategories, type ProfileMedia } from "@/data/profile";
+import type { ProfileMedia } from "@/data/profile";
 
 export function ProfileGallery({ media, variant = "grid" }: { media: ProfileMedia[]; variant?: "hero" | "grid" }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -14,6 +14,7 @@ export function ProfileGallery({ media, variant = "grid" }: { media: ProfileMedi
   const [open, setOpen] = useState(false);
   const selected = media[selectedIndex];
   const visible = category === "All photos" ? media : media.filter((item) => item.category === category);
+  const categories = Array.from(new Set(media.map((item) => item.category))).sort((a, b) => a.localeCompare(b));
 
   useEffect(() => {
     if (!open) return;
@@ -46,10 +47,10 @@ export function ProfileGallery({ media, variant = "grid" }: { media: ProfileMedi
       </div>
     ) : (
       <div>
-        <label htmlFor={`${titleId}-category`} className="mb-2 block text-sm font-bold text-slate-700">Facility category</label>
+        <label htmlFor={`${titleId}-category`} className="mb-2 block text-sm font-bold text-slate-700">Photo category</label>
         <select id={`${titleId}-category`} value={category} onChange={(event) => setCategory(event.target.value)} className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 focus:outline-2 focus:outline-emerald-600 sm:max-w-xs">
           <option>All photos</option>
-          {mediaCategories.map((item) => <option key={item} value={item}>{item} ({media.filter((photo) => photo.category === item).length})</option>)}
+          {categories.map((item) => <option key={item} value={item}>{item} ({media.filter((photo) => photo.category === item).length})</option>)}
         </select>
         <p role="status" className="mt-3 text-sm text-slate-500">{visible.length} {visible.length === 1 ? "photo" : "photos"}</p>
         {visible.length > 0 ? <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{visible.map((item) => <button type="button" key={item.id} onClick={() => showPhoto(media.findIndex((photo) => photo.id === item.id))} aria-label={`Open ${item.category.toLowerCase()} photo`} className="group relative aspect-[4/3] overflow-hidden rounded-2xl bg-slate-100 focus-visible:outline-4 focus-visible:outline-emerald-600">

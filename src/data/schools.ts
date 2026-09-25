@@ -1,5 +1,13 @@
 export type VerificationLevel = "physically-verified" | "document-verified" | "school-provided";
 
+export type SchoolProfileImage = {
+  id: string;
+  src: string;
+  category: string;
+  caption: string;
+  alt: string;
+};
+
 export type School = {
   databaseId?: string;
   slug: string;
@@ -21,6 +29,7 @@ export type School = {
   verification: VerificationLevel;
   image: string | null;
   images: string[];
+  media?: SchoolProfileImage[];
   description: string;
   facilities: string[];
   tags: string[];

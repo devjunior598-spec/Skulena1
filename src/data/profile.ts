@@ -1,15 +1,7 @@
 import type { School } from "@/data/schools";
-import { mediaCategories } from "@/types/domain";
+import type { SchoolProfileImage } from "@/data/schools";
 
-export { mediaCategories };
-
-export type ProfileMedia = {
-  id: string;
-  src: string;
-  category: (typeof mediaCategories)[number];
-  caption: string;
-  alt: string;
-};
+export type ProfileMedia = SchoolProfileImage;
 
 export type SchoolProfileDetails = {
   story: string;
@@ -29,7 +21,7 @@ export function getSchoolProfile(school: School): SchoolProfileDetails {
       requirements: [],
     },
     reviews: [],
-    media: school.images.map((src, index) => ({
+    media: school.media ?? school.images.map((src, index) => ({
       id: `${school.slug}-media-${index}`,
       src,
       category: "Campus",

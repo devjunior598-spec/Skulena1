@@ -38,7 +38,7 @@ export const onboardingSchema = z.object({
 export type OnboardingValues = z.infer<typeof onboardingSchema>;
 
 export const mediaUploadSchema = z.object({
-  schoolId: z.string().uuid(), category: z.string().min(2).max(80),
+  schoolId: z.string().uuid(), category: z.string().trim().min(2).max(80),
   caption: z.string().max(300), mediaType: z.enum(["image", "video"]),
   storagePath: z.string().min(10).max(500), mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"]),
   byteSize: z.number().int().positive().max(104857600),
