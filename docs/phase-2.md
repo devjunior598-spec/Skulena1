@@ -19,7 +19,7 @@
 
 6. Start a disposable local database with `supabase start`, then run `supabase test db` to execute `supabase/tests/database/rls.sql`.
 
-Migrations create the normalized application schema, restrictive grants and RLS, auth profile trigger, school workflow RPCs, safe public views, audit events, and two private storage buckets. `supabase/seed.sql` is development-only and deliberately creates a draft, unverified fictional school only when its documented local owner exists.
+Migrations create the normalized application schema, restrictive grants and RLS, auth profile trigger, school workflow RPCs, safe public views, audit events, and two private storage buckets. Discovery has no sample seed data and displays only published school records.
 
 ## Trust boundaries
 

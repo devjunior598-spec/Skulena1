@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { schools as demoSchools, type School, type VerificationLevel } from "@/data/schools";
+import type { School, VerificationLevel } from "@/data/schools";
 
 function relationName(value: unknown) {
   if (!value || typeof value !== "object") return null;
@@ -10,7 +10,7 @@ function relationName(value: unknown) {
 
 export async function getPublicSchools(): Promise<School[]> {
   const supabase = await createClient();
-  if (!supabase) return demoSchools;
+  if (!supabase) return [];
   const { data: rows, error } = await supabase.from("public_school_profiles").select("*").order("published_at", { ascending: false }).limit(100);
   if (error || !rows?.length) return [];
   const ids = rows.map((row) => row.id);
@@ -33,7 +33,7 @@ export async function getPublicSchools(): Promise<School[]> {
     const methods = (verification ?? []).filter((item) => item.school_id === row.id).map((item) => item.method);
     const verificationLevel: VerificationLevel = methods.includes("physically_verified") ? "physically-verified" : methods.includes("document_verified") ? "document-verified" : "school-provided";
     const structure = row.structure === "day_and_boarding" ? "Day & Boarding" : row.structure === "boarding" ? "Day & Boarding" : "Day";
-    return { databaseId: row.id, isDemo: false, slug: row.slug, name: row.name, shortName: row.short_name || row.name, location: [branch?.area, branch?.city, branch?.state].filter(Boolean).join(", ") || "Location available on request", city: branch?.city || "", distance: "", levels: (levels ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.levels)).filter((value): value is string => Boolean(value)), curriculum: (curricula ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.curricula)).filter((value): value is string => Boolean(value)), type: structure, admissionStatus: row.admission_status, admissionDescription: row.admission_description || undefined, feeFrom: amounts.length ? Math.min(...amounts) : 0, feeTo: amounts.length ? Math.max(...amounts) : 0, rating: 0, reviewCount: 0, classSize: 0, verification: verificationLevel, image: cover ? urls.get(cover.storage_path) || "/images/demo/campus.jpg" : "/images/demo/campus.jpg", images: schoolMedia.map((item) => urls.get(item.storage_path)).filter((value): value is string => Boolean(value)), description: row.description || "School profile", facilities: (facilities ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.facilities)).filter((value): value is string => Boolean(value)), tags: [], } satisfies School;
+    return { databaseId: row.id, slug: row.slug, name: row.name, shortName: row.short_name || row.name, location: [branch?.area, branch?.city, branch?.state].filter(Boolean).join(", ") || "Location available on request", city: branch?.city || "", distance: "", levels: (levels ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.levels)).filter((value): value is string => Boolean(value)), curriculum: (curricula ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.curricula)).filter((value): value is string => Boolean(value)), type: structure, admissionStatus: row.admission_status, admissionDescription: row.admission_description || undefined, feeFrom: amounts.length ? Math.min(...amounts) : 0, feeTo: amounts.length ? Math.max(...amounts) : 0, rating: 0, reviewCount: 0, classSize: 0, verification: verificationLevel, image: cover ? urls.get(cover.storage_path) ?? null : null, images: schoolMedia.map((item) => urls.get(item.storage_path)).filter((value): value is string => Boolean(value)), description: row.description || "School profile", facilities: (facilities ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.facilities)).filter((value): value is string => Boolean(value)), tags: [], } satisfies School;
   });
 }
 

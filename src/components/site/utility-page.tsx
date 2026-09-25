@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, type LucideIcon } from "lucide-react";
 import { Header } from "./header";
 import { Footer } from "./footer";
-import { MobileNav } from "./mobile-nav";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
@@ -18,11 +17,10 @@ export function UtilityPage({ eyebrow, title, description, icon: Icon, children 
           <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-[-0.04em] text-[#0e2946] sm:text-5xl">{title}</h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">{description}</p>
           <div className="mt-8 space-y-5">{children}</div>
-          <Button variant="outline" asChild className="mt-8"><Link href="/schools">Explore demo schools <ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
+          <Button variant="outline" asChild className="mt-8"><Link href="/schools">Find schools <ArrowRight className="size-4" aria-hidden="true" /></Link></Button>
         </div>
       </main>
       <Footer />
-      <MobileNav />
     </>
   );
 }

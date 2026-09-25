@@ -11,7 +11,6 @@
   --border: #e2e8f0;
   --ring: #059669;
   --radius: 0.75rem;
-  --mobile-nav-height: calc(4.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 @theme inline {

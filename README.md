@@ -15,7 +15,7 @@ npm run dev:portable
 
 Open [http://localhost:3000](http://localhost:3000). The first run needs registry access. Node.js 20.19+ and macOS `rsync` are required.
 
-Without Supabase variables, the public product deliberately falls back to clearly labelled fictional fixtures. Account, dashboard and upload actions remain unavailable until Supabase is configured. Once Supabase is configured, public discovery returns only published database schools—never fixtures.
+Public discovery returns published school records only. If the database is unavailable or no schools have been published yet, the site displays an empty state rather than invented listings.
 
 ## Supabase setup
 
@@ -77,7 +77,7 @@ Phase 2 intentionally does not implement payments, subscriptions, promoted listi
 - `src/lib/schools` — public allowlisted queries and school-workspace data
 - `src/app/parent`, `src/app/school/(portal)` — protected portals
 - `src/components/auth`, `src/components/portal`, `src/components/school` — reusable application UI
-- `src/data` — explicit fictional fallback fixtures only
+- `src/data` — shared product types and display formatters
 - `scripts/portable.mjs` — external-filesystem development/build support
 
 ## Security model

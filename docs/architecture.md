@@ -2,7 +2,7 @@
 
 ## Phase 2 implemented boundary
 
-Next.js App Router renders public pages and metadata on the server. Supabase SSR provides email/password authentication, cookie refresh, server-authorized role routing and RLS-backed repositories. Published database schools replace fixtures whenever Supabase is configured; clearly labelled fictional fixtures remain only as an unconfigured development fallback.
+Next.js App Router renders public pages and metadata on the server. Supabase SSR provides email/password authentication, cookie refresh, server-authorized role routing and RLS-backed repositories. Public discovery reads published database records only. If configuration is missing or the catalog is empty, the site shows no school listings rather than fallback fixtures.
 
 Replace the data modules with server-only repositories in the next backend milestone. Public repositories must return an explicit allowlist of approved school fields and published media. Keep child profiles and application data out of all public models and caches.
 
@@ -15,7 +15,7 @@ Replace the data modules with server-only repositories in the next backend miles
 | School | Separate school route group and authenticated layout | Current user has active staff membership for the selected school/branch |
 | Admin | Separate admin route group and authenticated layout | Server-authorized moderation, inspection or administration permissions |
 
-Role names and application status vocabulary are in `src/types/domain.ts`. Layout checks improve navigation but never replace server authorization. The public `/profile` and `/applications` pages are preview explanations, not protected portals.
+Role names and application status vocabulary are in `src/types/domain.ts`. Layout checks improve navigation but never replace server authorization. The public `/profile` and `/applications` routes direct users to their account or school contact paths; protected parent and school workspace routes remain separately authorized.
 
 ## Supabase and privacy boundary
 
@@ -32,12 +32,12 @@ Index published school locations and slugs, membership user/school IDs, child ow
 
 ## Providers and SEO
 
-Maps, Paystack, communications, media processing, analytics and monitoring adapters belong under `src/lib/integrations`; no paid integration is initialized. A real map requires confirmed school coordinates and a configured provider. Sample map pins are explicitly illustrative.
+Maps, Paystack, communications, media processing, analytics and monitoring adapters belong under `src/lib/integrations`; no paid integration is initialized. A map view should only be added after confirmed school coordinates and a configured provider are available.
 
-Routes have descriptive server metadata and human-readable school/location URLs. All demo content is `noindex,nofollow`; fictional ratings are never emitted as review structured data. Before launch, set a real site origin, switch indexability only for published real records and use the structured metadata builders for verified publishable School, Review, Place and BreadcrumbList data.
+Routes have descriptive server metadata and human-readable school/location URLs. Structured School, Review, Place and BreadcrumbList data must be built only from verified, publishable records.
 
 ## Deployment and local development
 
-Production is a standard Next.js deployment with a lockfile. No secrets or external accounts are required for this milestone. Bundled stock photos use Next Image optimization, and the Inter variable font is self-hosted. The Next.js webpack pipeline is selected because Turbopack's worker-port binding is blocked in this managed environment.
+Production is a standard Next.js deployment with a lockfile. Bundled application assets use Next Image optimization, and the Inter variable font is self-hosted. The Next.js webpack pipeline is selected because Turbopack's worker-port binding is blocked in this managed environment.
 
 This workspace's FAT filesystem cannot host normal npm symlinks reliably. The optional portable runner keeps source here and mirrors it into a dedicated, workspace-specific folder on the OS temporary drive. Dependencies, build caches and runtime writes stay there. Development synchronizes source every two seconds. Temporary runtime data may be cleared by the OS and is recreated on the next run. Use a normal APFS/Linux filesystem for production builds and long-term development when possible.
