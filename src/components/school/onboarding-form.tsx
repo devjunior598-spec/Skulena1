@@ -37,8 +37,8 @@ export function OnboardingForm({ initialValues, initialCompletion }: { initialVa
     const parsed = onboardingSchema.safeParse({ ...getValues(), schoolId, step });
     if (!parsed.success) { setStatus("error"); setMessage(parsed.error.issues[0]?.message ?? "Check this step."); return; }
     const result = await saveOnboardingStep(parsed.data);
-    if (result.error) { setStatus("error"); setMessage(result.error); return; }
     if (result.schoolId) { setSchoolId(result.schoolId); setValue("schoolId", result.schoolId); }
+    if (result.error) { setStatus("error"); setMessage(result.error); return; }
     setCompletion(result.completion ?? completion); setStatus("saved"); if (next) setStep((current) => Math.min(10, current + 1));
   }
   async function submit() {

@@ -21,7 +21,7 @@ export async function saveOnboardingStep(values: OnboardingValues): Promise<Save
     schoolId = data as string;
   }
 
-  let error: { message: string } | null = null;
+  let error: { code?: string; message: string } | null = null;
   if (input.step === 1) {
     ({ error } = await supabase.from("schools").update({ name: input.name, slug: input.slug, school_type: input.schoolType, year_established: input.yearEstablished || null, description: input.description || null, contact_email: input.contactEmail || null, contact_phone: input.contactPhone || null, website_url: input.websiteUrl || null }).eq("id", schoolId));
   } else if (input.step === 2) {
@@ -51,7 +51,10 @@ export async function saveOnboardingStep(values: OnboardingValues): Promise<Save
       if (requirements.length) ({ error } = await supabase.from("school_admission_requirements").insert(requirements.map((requirement, sort_order) => ({ school_id: schoolId, requirement, sort_order }))));
     }
   }
-  if (error) return { schoolId, error: "We couldn’t save this step. Your earlier progress is still safe." };
+  if (error) {
+    console.error("[school-registration] step save failed", { step: input.step, schoolId, code: error.code ?? "unknown" });
+    return { schoolId, error: error.code === "23505" && input.step === 1 ? "That profile address is already in use." : "We couldn’t save this step. Your earlier progress is still safe." };
+  }
   const { data: completion } = await supabase.rpc("school_profile_completion", { target_school_id: schoolId });
   revalidatePath("/school/dashboard");
   return { schoolId, completion: Number(completion ?? 0) };
