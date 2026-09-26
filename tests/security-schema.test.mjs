@@ -13,6 +13,8 @@ const homepage = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "
 const publicSchoolLoader = readFileSync(new URL("../src/lib/schools/public-schools.ts", import.meta.url), "utf8");
 const schoolCard = readFileSync(new URL("../src/components/schools/school-card.tsx", import.meta.url), "utf8");
 const mediaActions = readFileSync(new URL("../src/app/school/(portal)/media/actions.ts", import.meta.url), "utf8");
+const adminReviewPage = readFileSync(new URL("../src/app/admin/page.tsx", import.meta.url), "utf8");
+const adminReviewActions = readFileSync(new URL("../src/app/admin/actions.ts", import.meta.url), "utf8");
 
 test("all required application tables are migrated", () => {
   for (const table of ["profiles", "parent_profiles", "children", "schools", "school_branches", "school_members", "school_levels", "school_classes", "school_curricula", "school_facilities", "school_media", "school_fees", "school_documents", "verification_records", "inspections", "inspection_items", "saved_schools", "reviews", "review_responses", "notifications", "audit_logs"]) {
@@ -100,4 +102,15 @@ test("school logos upload through scoped media and only approved logos are publi
   assert.match(mediaActions, /SCHOOL_LOGO_CATEGORY/);
   assert.match(publicSchoolLoader, /eq\("moderation_status", "approved"\)/);
   assert.match(schoolCard, /school\.logo/);
+});
+
+test("school review queue reads pending profiles and limits publication to platform admins", () => {
+  assert.match(adminReviewPage, /requireAccount\(\["inspector", "moderator", "admin", "super_admin"\]\)/);
+  assert.match(adminReviewPage, /\.in\("status", \["submitted", "under_review"\]\)/);
+  assert.match(adminReviewPage, /publishing a school does not automatically approve its photos or logo/i);
+  assert.match(adminReviewActions, /profile\.role !== "admin" && profile\.role !== "super_admin"/);
+  assert.match(adminReviewActions, /supabase\.rpc\("set_school_status"/);
+  assert.match(adminReviewActions, /confirmation_required/);
+  assert.match(adminReviewActions, /school\.status === "submitted"/);
+  assert.doesNotMatch(adminReviewActions, /\.from\("schools"\)\.update\(/);
 });
