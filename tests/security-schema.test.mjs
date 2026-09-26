@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 const core = readFileSync(new URL("../supabase/migrations/202609210001_core_schema.sql", import.meta.url), "utf8");
 const security = readFileSync(new URL("../supabase/migrations/202609210002_security_and_workflows.sql", import.meta.url), "utf8");
 const storage = readFileSync(new URL("../supabase/migrations/202609210003_storage.sql", import.meta.url), "utf8");
+const authActions = readFileSync(new URL("../src/app/auth/actions.ts", import.meta.url), "utf8");
+const authCallback = readFileSync(new URL("../src/app/auth/callback/route.ts", import.meta.url), "utf8");
 
 test("all required application tables are migrated", () => {
   for (const table of ["profiles", "parent_profiles", "children", "schools", "school_branches", "school_members", "school_levels", "school_classes", "school_curricula", "school_facilities", "school_media", "school_fees", "school_documents", "verification_records", "inspections", "inspection_items", "saved_schools", "reviews", "review_responses", "notifications", "audit_logs"]) {
@@ -17,6 +19,19 @@ test("auth metadata accepts only public registration roles", () => {
   assert.match(security, /when 'school_owner' then 'school_owner'/);
   assert.match(security, /else 'parent'/);
   assert.doesNotMatch(security, /when 'admin' then 'admin'/);
+});
+
+test("auth actions explain rate limits and support confirmation recovery", () => {
+  assert.match(authActions, /over_email_send_rate_limit/);
+  assert.match(authActions, /over_request_rate_limit/);
+  assert.match(authActions, /resendConfirmationAction/);
+  assert.match(authActions, /email_not_confirmed/);
+  assert.doesNotMatch(authActions, /return \{ error: error\.message \}/);
+});
+
+test("auth callback only redirects to same-origin destinations", () => {
+  assert.match(authCallback, /destination\.origin !== origin/);
+  assert.match(authCallback, /safeNext\(request\.nextUrl\.searchParams\.get\("next"\), request\.nextUrl\.origin\)/);
 });
 
 test("critical negative-access policies exist", () => {
