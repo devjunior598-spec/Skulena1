@@ -4,8 +4,43 @@ import { revalidatePath } from "next/cache";
 import { requireAccount } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { onboardingSchema, type OnboardingValues } from "@/lib/validation/school";
+import { z } from "zod";
 
-type SaveResult = { schoolId?: string; completion?: number; error?: string; submitted?: boolean };
+export type SubmissionRequirement = { step: number; label: string; instruction: string; complete: boolean };
+type SaveResult = { schoolId?: string; completion?: number; error?: string; submitted?: boolean; requirements?: SubmissionRequirement[] };
+
+const schoolIdSchema = z.string().uuid();
+
+async function loadSubmissionRequirements(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>, userId: string, schoolId: string) {
+  const { data: membership, error: membershipError } = await supabase.from("school_members").select("id").eq("school_id", schoolId).eq("user_id", userId).eq("is_active", true).in("role", ["owner", "administrator"]).maybeSingle();
+  if (membershipError || !membership) return { error: "We couldn’t verify access to this school profile." } as const;
+
+  const [schoolResult, branchResult, levelsResult, curriculaResult] = await Promise.all([
+    supabase.from("schools").select("description").eq("id", schoolId).maybeSingle(),
+    supabase.from("school_branches").select("address_line").eq("school_id", schoolId).eq("is_main", true).maybeSingle(),
+    supabase.from("school_levels").select("id").eq("school_id", schoolId),
+    supabase.from("school_curricula").select("id").eq("school_id", schoolId),
+  ]);
+  if (schoolResult.error || branchResult.error || levelsResult.error || curriculaResult.error || !schoolResult.data) {
+    return { error: "We couldn’t check the required school details. Please try again." } as const;
+  }
+
+  const requirements: SubmissionRequirement[] = [
+    { step: 1, label: "School description", instruction: "Add a short, accurate introduction in Basic information.", complete: Boolean(schoolResult.data.description?.trim()) },
+    { step: 2, label: "Full school address", instruction: "Add the school’s street address in Location.", complete: Boolean(branchResult.data?.address_line?.trim()) },
+    { step: 3, label: "At least one level", instruction: "Select at least one level the school offers.", complete: Boolean(levelsResult.data?.length) },
+    { step: 5, label: "At least one curriculum", instruction: "Select at least one curriculum the school uses.", complete: Boolean(curriculaResult.data?.length) },
+  ];
+  return { requirements } as const;
+}
+
+export async function getSchoolSubmissionRequirements(schoolId: string) {
+  const { user } = await requireAccount(["school_owner"]);
+  const parsedId = schoolIdSchema.safeParse(schoolId);
+  if (!parsedId.success) return { error: "We couldn’t verify the selected school profile." };
+  const supabase = (await createClient())!;
+  return loadSubmissionRequirements(supabase, user.id, parsedId.data);
+}
 
 export async function saveOnboardingStep(values: OnboardingValues): Promise<SaveResult> {
   await requireAccount(["school_owner"]);
@@ -61,10 +96,19 @@ export async function saveOnboardingStep(values: OnboardingValues): Promise<Save
 }
 
 export async function submitSchool(schoolId: string): Promise<SaveResult> {
-  await requireAccount(["school_owner"]);
+  const { user } = await requireAccount(["school_owner"]);
+  const parsedId = schoolIdSchema.safeParse(schoolId);
+  if (!parsedId.success) return { error: "We couldn’t verify the selected school profile." };
   const supabase = (await createClient())!;
-  const { error } = await supabase.rpc("submit_school", { target_school_id: schoolId });
-  if (error) return { schoolId, error: error.message };
+  const readiness = await loadSubmissionRequirements(supabase, user.id, parsedId.data);
+  if ("error" in readiness) return { schoolId, error: readiness.error };
+  const missing = readiness.requirements.filter((requirement) => !requirement.complete);
+  if (missing.length) return { schoolId, requirements: readiness.requirements, error: `Before you submit, please complete: ${missing.map((requirement) => requirement.label).join(", ")}.` };
+  const { error } = await supabase.rpc("submit_school", { target_school_id: parsedId.data });
+  if (error) {
+    console.error("[school-registration] submission rejected", { schoolId, code: error.code ?? "unknown" });
+    return { schoolId, requirements: readiness.requirements, error: "We couldn’t submit the profile yet. Your saved draft is safe. Review the checklist and try again." };
+  }
   revalidatePath("/school/dashboard");
   return { schoolId, submitted: true };
 }

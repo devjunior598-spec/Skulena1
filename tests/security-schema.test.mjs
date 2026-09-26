@@ -7,6 +7,8 @@ const security = readFileSync(new URL("../supabase/migrations/202609210002_secur
 const storage = readFileSync(new URL("../supabase/migrations/202609210003_storage.sql", import.meta.url), "utf8");
 const authActions = readFileSync(new URL("../src/app/auth/actions.ts", import.meta.url), "utf8");
 const authCallback = readFileSync(new URL("../src/app/auth/callback/route.ts", import.meta.url), "utf8");
+const registrationActions = readFileSync(new URL("../src/app/for-schools/register/actions.ts", import.meta.url), "utf8");
+const registrationForm = readFileSync(new URL("../src/components/school/onboarding-form.tsx", import.meta.url), "utf8");
 
 test("all required application tables are migrated", () => {
   for (const table of ["profiles", "parent_profiles", "children", "schools", "school_branches", "school_members", "school_levels", "school_classes", "school_curricula", "school_facilities", "school_media", "school_fees", "school_documents", "verification_records", "inspections", "inspection_items", "saved_schools", "reviews", "review_responses", "notifications", "audit_logs"]) {
@@ -61,4 +63,13 @@ test("public school view exposes an explicit allowlist", () => {
   const view = security.slice(security.indexOf("create view public.public_school_profiles"), security.indexOf("create view public.public_verification_records"));
   assert.doesNotMatch(view, /created_by|contact_email|contact_phone/);
   assert.match(view, /where s\.status = 'published'/);
+});
+
+test("school submission requirements are explained before the database guard rejects", () => {
+  const submitGuard = security.slice(security.indexOf("create or replace function public.submit_school"), security.indexOf("create or replace function public.set_school_status"));
+  for (const field of ["target.description", "address_line", "public.school_levels", "public.school_curricula"]) assert.ok(submitGuard.includes(field), field);
+  for (const label of ["School description", "Full school address", "At least one level", "At least one curriculum"]) assert.ok(registrationActions.includes(label), label);
+  assert.match(registrationActions, /missing\.map\(\(requirement\) => requirement\.label\)/);
+  assert.match(registrationForm, /Required before submission/);
+  assert.match(registrationForm, /Go to step/);
 });
