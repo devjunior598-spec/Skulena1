@@ -78,6 +78,14 @@ test("school submission requirements are explained before the database guard rej
   assert.match(registrationForm, /Go to step/);
 });
 
+test("school submission checklist selects existing join-table keys", () => {
+  assert.match(core, /create table public\.school_levels\s*\([\s\S]*?primary key \(school_id, level_id\)/);
+  assert.match(core, /create table public\.school_curricula\s*\([\s\S]*?primary key \(school_id, curriculum_id\)/);
+  assert.match(registrationActions, /from\("school_levels"\)\.select\("level_id"\)/);
+  assert.match(registrationActions, /from\("school_curricula"\)\.select\("curriculum_id"\)/);
+  assert.doesNotMatch(registrationActions, /from\("school_(?:levels|curricula)"\)\.select\("id"\)/);
+});
+
 test("homepage lists published schools directly instead of a marketing hero", () => {
   assert.match(homepage, /getPublicSchools\(\)/);
   assert.match(homepage, /schools\.map\(\(school\) => <SchoolCard/);

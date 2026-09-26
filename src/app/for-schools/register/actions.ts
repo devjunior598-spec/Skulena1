@@ -18,8 +18,8 @@ async function loadSubmissionRequirements(supabase: NonNullable<Awaited<ReturnTy
   const [schoolResult, branchResult, levelsResult, curriculaResult] = await Promise.all([
     supabase.from("schools").select("description").eq("id", schoolId).maybeSingle(),
     supabase.from("school_branches").select("address_line").eq("school_id", schoolId).eq("is_main", true).maybeSingle(),
-    supabase.from("school_levels").select("id").eq("school_id", schoolId),
-    supabase.from("school_curricula").select("id").eq("school_id", schoolId),
+    supabase.from("school_levels").select("level_id").eq("school_id", schoolId),
+    supabase.from("school_curricula").select("curriculum_id").eq("school_id", schoolId),
   ]);
   if (schoolResult.error || branchResult.error || levelsResult.error || curriculaResult.error || !schoolResult.data) {
     return { error: "We couldn’t check the required school details. Please try again." } as const;
