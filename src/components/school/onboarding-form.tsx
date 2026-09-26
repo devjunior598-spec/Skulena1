@@ -20,8 +20,39 @@ function CheckGrid({ name, options, register }: { name: "levels" | "curricula" |
   return <div className="grid gap-3 sm:grid-cols-2">{options.map(([value, label]) => <label key={value} className="flex min-h-13 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-4 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50"><input type="checkbox" value={value} {...register(name)} className="size-4 accent-emerald-700" /><span className="text-sm font-bold text-slate-700">{label}</span></label>)}</div>;
 }
 
+function ProgressSidebar({ currentStep, completion, completedSteps, locked, onNavigate }: { currentStep: number; completion: number; completedSteps: number[]; locked: boolean; onNavigate: (step: number) => void }) {
+  return <aside aria-label="Profile setup progress">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 lg:sticky lg:top-6">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-extrabold text-slate-600">Profile completion</p>
+        <span className="text-lg font-extrabold leading-none text-[#0e2946]">{completion}%</span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Profile completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completion}>
+        <div className="h-full rounded-full bg-emerald-600 transition-[width] duration-300" style={{ width: `${completion}%` }} />
+      </div>
+      <p className="mt-2 text-[11px] font-medium text-slate-500">{completedSteps.length} of {steps.length} steps completed</p>
+      <ol className="mt-3 hidden space-y-1 lg:block">
+        {steps.map((label, index) => {
+          const stepNumber = index + 1;
+          const isCurrent = currentStep === stepNumber;
+          const isComplete = !isCurrent && completedSteps.includes(stepNumber);
+          const state = isCurrent ? "Current step" : isComplete ? "Completed" : "Upcoming";
+          return <li key={label}>
+            <button type="button" aria-current={isCurrent ? "step" : undefined} aria-label={`${label}, ${state.toLowerCase()}`} disabled={locked && !isCurrent} onClick={() => onNavigate(stepNumber)} className={`flex min-h-8 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isCurrent ? "bg-emerald-50 text-[#0e2946] ring-1 ring-inset ring-emerald-200" : isComplete ? "text-emerald-900 hover:bg-emerald-50/80" : "text-slate-500 hover:bg-slate-50"}`}>
+              <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-extrabold ${isCurrent ? "bg-emerald-700 text-white" : isComplete ? "bg-emerald-100 text-emerald-800" : "border border-slate-200 bg-white text-slate-400"}`}>{isComplete ? <Check className="size-3" aria-hidden="true" /> : stepNumber}</span>
+              <span className={`min-w-0 flex-1 truncate text-[11px] leading-4 ${isCurrent ? "font-extrabold" : "font-semibold"}`}>{label}</span>
+              {isCurrent && <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide text-emerald-800">Now</span>}
+            </button>
+          </li>;
+        })}
+      </ol>
+    </div>
+  </aside>;
+}
+
 export function OnboardingForm({ initialValues, initialCompletion }: { initialValues: OnboardingValues; initialCompletion: number }) {
   const [step, setStep] = useState(initialValues.step || 1); const [schoolId, setSchoolId] = useState(initialValues.schoolId); const [completion, setCompletion] = useState(initialCompletion); const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error" | "submitted">("idle"); const [message, setMessage] = useState(""); const [pendingMediaCount, setPendingMediaCount] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<number[]>(() => Array.from({ length: Math.max(0, (initialValues.step || 1) - 1) }, (_, index) => index + 1));
   const { control, register, getValues, setValue, formState: { errors } } = useForm<OnboardingValues>({ defaultValues: initialValues });
   const watchedValues = useWatch({ control });
   const hasUnuploadedMedia = step === 8 && pendingMediaCount > 0;
@@ -40,14 +71,14 @@ export function OnboardingForm({ initialValues, initialCompletion }: { initialVa
     const result = await saveOnboardingStep(parsed.data);
     if (result.schoolId) { setSchoolId(result.schoolId); setValue("schoolId", result.schoolId); }
     if (result.error) { setStatus("error"); setMessage(result.error); return; }
-    setCompletion(result.completion ?? completion); setStatus("saved"); if (next) setStep((current) => Math.min(10, current + 1));
+    setCompletion(result.completion ?? completion); setStatus("saved"); if (next) { setCompletedSteps((current) => current.includes(step) ? current : [...current, step]); setStep((current) => Math.min(10, current + 1)); }
   }
   async function submit() {
     if (!schoolId) { setMessage("Save the first step before submitting."); return; }
     setStatus("saving"); const result = await submitSchool(schoolId); if (result.error) { setStatus("error"); setMessage(result.error); } else setStatus("submitted");
   }
   if (status === "submitted") return <div className="rounded-3xl border border-emerald-200 bg-white p-8 text-center"><span className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-100 text-emerald-700"><Check className="size-7" /></span><h1 className="mt-5 text-3xl font-extrabold text-[#0e2946]">Profile submitted</h1><p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-slate-600">Your school is now under review. Submission does not publish the profile or award a verification badge.</p><Button asChild className="mt-6"><Link href="/school/dashboard">Go to dashboard</Link></Button></div>;
-  return <div className="grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)]"><aside><div className="rounded-2xl border border-slate-200 bg-white p-5 lg:sticky lg:top-6"><p className="text-xs font-extrabold uppercase tracking-widest text-emerald-700">Profile completion</p><p className="mt-2 text-3xl font-extrabold text-[#0e2946]">{completion}%</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-600 transition-all" style={{ width: `${completion}%` }} /></div><ol className="mt-5 hidden space-y-1 lg:block">{steps.map((label, index) => <li key={label}><button type="button" disabled={hasUnuploadedMedia && index + 1 !== step} onClick={() => setStep(index + 1)} className={`w-full rounded-lg px-3 py-2 text-left text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50 ${step === index + 1 ? "bg-emerald-50 text-emerald-800" : "text-slate-500 hover:bg-slate-50"}`}>{index + 1}. {label}</button></li>)}</ol></div></aside>
+  return <div className="grid gap-6 lg:grid-cols-[210px_minmax(0,1fr)]"><ProgressSidebar currentStep={step} completion={completion} completedSteps={completedSteps} locked={hasUnuploadedMedia} onNavigate={setStep} />
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-45px_rgba(14,41,70,.45)] sm:p-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-extrabold uppercase tracking-widest text-emerald-700">Step {step} of 10</p><h1 className="mt-2 text-2xl font-extrabold tracking-tight text-[#0e2946]">{steps[step - 1]}</h1></div><p aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-slate-500">{status === "saving" ? <><LoaderCircle className="size-4 animate-spin" />Saving…</> : status === "saved" ? <><Cloud className="size-4 text-emerald-700" />Progress saved</> : "Saved as a draft"}</p></div>
       <div className="mt-7 space-y-5">
         {step === 1 && <><label className="block text-sm font-bold">School name<input {...register("name")} className={input} onBlur={(event) => { if (!values.slug) setValue("slug", event.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")); }} /></label><label className="block text-sm font-bold">Profile address<input {...register("slug")} className={input} placeholder="greenfield-school" /></label><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">School type<select {...register("schoolType")} className={input}><option value="private">Private</option><option value="public">Public</option><option value="faith_based">Faith-based</option><option value="international">International</option><option value="other">Other</option></select></label><label className="block text-sm font-bold">Year established<input type="number" {...register("yearEstablished")} className={input} /></label></div><label className="block text-sm font-bold">Description<textarea {...register("description")} className={textarea} rows={5} /></label><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">Contact email<input type="email" {...register("contactEmail")} className={input} /></label><label className="block text-sm font-bold">Phone<input {...register("contactPhone")} className={input} /></label></div><label className="block text-sm font-bold">Website<input type="url" {...register("websiteUrl")} className={input} placeholder="https://" /></label></>}
