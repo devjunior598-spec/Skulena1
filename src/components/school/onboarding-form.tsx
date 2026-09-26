@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useForm, useWatch } from "react-hook-form";
-import { ArrowLeft, ArrowRight, Check, Cloud, LoaderCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Cloud, ImagePlus, LoaderCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { onboardingSchema, type OnboardingValues } from "@/lib/validation/school";
 import { getSchoolSubmissionRequirements, saveOnboardingStep, submitSchool, type SubmissionRequirement } from "@/app/for-schools/register/actions";
+import { registerMediaRecord } from "@/app/school/(portal)/media/actions";
+import { createClient } from "@/lib/supabase/client";
 import { MediaUploader } from "@/components/school/media-uploader";
+import { SCHOOL_LOGO_CATEGORY } from "@/types/domain";
 
 const steps = ["Basic information", "Location", "Levels", "Structure", "Curriculum", "Facilities", "Fees", "Photos & videos", "Admissions", "Review"];
 const levelOptions = [["creche", "Creche"], ["nursery", "Nursery"], ["primary", "Primary"], ["junior_secondary", "Junior Secondary"], ["senior_secondary", "Senior Secondary"]] as const;
@@ -15,6 +19,40 @@ const curriculumOptions = [["nigerian", "Nigerian"], ["british", "British"], ["a
 const facilityOptions = [["classrooms", "Classrooms"], ["science_laboratory", "Science Laboratory"], ["ict_laboratory", "ICT Laboratory"], ["library", "Library"], ["playground", "Playground"], ["sports", "Sports Facilities"], ["school_bus", "School Bus"], ["dining", "Dining"], ["kitchen", "Kitchen"], ["sick_bay", "Sick Bay"], ["toilets", "Toilets"], ["boarding", "Boarding"], ["security", "Security"], ["special_needs", "Special Needs Facilities"], ["other", "Other"]] as const;
 const input = "mt-2 h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-[#0e2946] focus:border-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-600/10";
 const textarea = "mt-2 w-full rounded-xl border border-slate-300 bg-white p-4 text-[#0e2946] focus:border-emerald-600 focus:outline-none focus:ring-4 focus:ring-emerald-600/10";
+const logoTypes = ["image/jpeg", "image/png", "image/webp"] as const;
+const logoExtensionByType = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
+const maxLogoBytes = 5 * 1024 * 1024;
+
+type InitialLogo = { url: string; moderationStatus: string } | null;
+
+async function uploadSchoolLogo(schoolId: string, file: File) {
+  if (!logoTypes.includes(file.type as typeof logoTypes[number])) return "Choose a JPEG, PNG or WebP logo.";
+  if (file.size > maxLogoBytes) return "School logos must be 5 MB or smaller.";
+  try {
+    const supabase = createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return "Your session expired. Sign in again, then retry the logo upload.";
+
+    const extension = logoExtensionByType[file.type as keyof typeof logoExtensionByType];
+    const storagePath = `${schoolId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage.from("school-media").upload(storagePath, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: false,
+    });
+    if (uploadError) return "We couldn’t upload the logo. Your saved school details are safe; please try again.";
+
+    const result = await registerMediaRecord({ schoolId, category: SCHOOL_LOGO_CATEGORY, caption: "School logo", mediaType: "image", storagePath, mimeType: file.type, byteSize: file.size });
+    if ("error" in result) {
+      const { error: cleanupError } = await supabase.storage.from("school-media").remove([storagePath]);
+      if (cleanupError) console.error("[school-registration] logo cleanup failed", { schoolId, code: cleanupError.name });
+      return result.error;
+    }
+    return null;
+  } catch {
+    return "We couldn’t upload the logo. Your saved school details are safe; please try again.";
+  }
+}
 
 function isStepComplete(step: number, values: OnboardingValues) {
   if (step === 1) return Boolean(values.name.trim() && values.slug.trim() && values.description.trim());
@@ -30,6 +68,41 @@ function isStepComplete(step: number, values: OnboardingValues) {
 
 function CheckGrid({ name, options, register }: { name: "levels" | "curricula" | "facilities"; options: readonly (readonly [string, string])[]; register: ReturnType<typeof useForm<OnboardingValues>>["register"] }) {
   return <div className="grid gap-3 sm:grid-cols-2">{options.map(([value, label]) => <label key={value} className="flex min-h-13 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-4 has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50"><input type="checkbox" value={value} {...register(name)} className="size-4 accent-emerald-700" /><span className="text-sm font-bold text-slate-700">{label}</span></label>)}</div>;
+}
+
+function SchoolLogoField({ initialLogo, previewUrl, uploadSaved, hasSelectedFile, disabled, onSelectFile, onClearSelection }: { initialLogo: InitialLogo; previewUrl: string; uploadSaved: boolean; hasSelectedFile: boolean; disabled: boolean; onSelectFile: (file: File) => void; onClearSelection: () => void }) {
+  const imageSource = previewUrl || initialLogo?.url;
+  const logoStatus = uploadSaved
+    ? "Logo saved to your draft; it will appear after review and publication."
+    : hasSelectedFile
+      ? "Selected. Save this step to upload the logo for review."
+      : initialLogo?.moderationStatus === "approved"
+        ? "Logo approved. It appears on the site when the profile is published."
+        : initialLogo
+          ? "Logo uploaded and awaiting review."
+          : "Optional. Add a clear logo image (JPEG, PNG or WebP, up to 5 MB).";
+
+  return (
+    <fieldset className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+      <legend className="px-1 text-sm font-bold text-[#0e2946]">School logo <span className="font-semibold text-slate-500">(optional)</span></legend>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-slate-200 bg-white text-emerald-800">
+          {imageSource ? <Image src={imageSource} alt="School logo preview" fill sizes="80px" unoptimized className="object-contain p-2" /> : <ImagePlus className="size-7" aria-hidden="true" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-700">Use your school’s official logo</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{logoStatus}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <label className={`inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white transition has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-emerald-700 ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-emerald-800"}`}>
+              <ImagePlus className="size-4" aria-hidden="true" />{imageSource ? "Choose another logo" : "Choose logo"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Choose school logo" disabled={disabled} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) onSelectFile(file); event.currentTarget.value = ""; }} />
+            </label>
+            {hasSelectedFile && <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onClearSelection}><X className="size-4" aria-hidden="true" />Remove selection</Button>}
+          </div>
+        </div>
+      </div>
+    </fieldset>
+  );
 }
 
 function ProgressSidebar({ currentStep, completion, completedSteps, locked, onNavigate }: { currentStep: number; completion: number; completedSteps: number[]; locked: boolean; onNavigate: (step: number) => void }) {
@@ -62,11 +135,14 @@ function ProgressSidebar({ currentStep, completion, completedSteps, locked, onNa
   </aside>;
 }
 
-export function OnboardingForm({ initialValues, initialCompletion, initialCompletedSteps }: { initialValues: OnboardingValues; initialCompletion: number; initialCompletedSteps: number[] }) {
+export function OnboardingForm({ initialValues, initialCompletion, initialCompletedSteps, initialLogo }: { initialValues: OnboardingValues; initialCompletion: number; initialCompletedSteps: number[]; initialLogo: InitialLogo }) {
   const [step, setStep] = useState(initialValues.step || 1); const [schoolId, setSchoolId] = useState(initialValues.schoolId); const [completion, setCompletion] = useState(initialCompletion); const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error" | "submitted">("idle"); const [message, setMessage] = useState(""); const [pendingMediaCount, setPendingMediaCount] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>(initialCompletedSteps);
   const [submissionRequirements, setSubmissionRequirements] = useState<SubmissionRequirement[] | null>(null);
   const [submissionCheckError, setSubmissionCheckError] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [logoUploadSaved, setLogoUploadSaved] = useState(false);
   const { control, register, getValues, setValue, formState: { errors } } = useForm<OnboardingValues>({ defaultValues: initialValues });
   const watchedValues = useWatch({ control });
   const hasUnuploadedMedia = step === 8 && pendingMediaCount > 0;
@@ -91,6 +167,10 @@ export function OnboardingForm({ initialValues, initialCompletion, initialComple
     });
     return () => { active = false; };
   }, [schoolId, step]);
+  useEffect(() => {
+    if (!logoPreview.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(logoPreview);
+  }, [logoPreview]);
   function navigateToStep(nextStep: number) {
     if (nextStep === 10 && step !== 10) {
       setSubmissionRequirements(null);
@@ -105,6 +185,13 @@ export function OnboardingForm({ initialValues, initialCompletion, initialComple
     const result = await saveOnboardingStep(parsed.data);
     if (result.schoolId) { setSchoolId(result.schoolId); setValue("schoolId", result.schoolId); }
     if (result.error) { setStatus("error"); setMessage(result.error); return; }
+    const savedSchoolId = result.schoolId ?? schoolId;
+    if (step === 1 && logoFile && savedSchoolId) {
+      const logoError = await uploadSchoolLogo(savedSchoolId, logoFile);
+      if (logoError) { setStatus("error"); setMessage(logoError); return; }
+      setLogoFile(null);
+      setLogoUploadSaved(true);
+    }
     setCompletion(result.completion ?? completion); setStatus("saved"); if (next) { setCompletedSteps((current) => { if (step === 8) return current; const complete = isStepComplete(step, parsed.data); return complete ? current.includes(step) ? current : [...current, step] : current.filter((savedStep) => savedStep !== step); }); navigateToStep(Math.min(10, step + 1)); }
   }
   async function submit() {
@@ -115,7 +202,7 @@ export function OnboardingForm({ initialValues, initialCompletion, initialComple
   return <div className="grid gap-6 lg:grid-cols-[210px_minmax(0,1fr)]"><ProgressSidebar currentStep={step} completion={completion} completedSteps={completedSteps} locked={hasUnuploadedMedia} onNavigate={navigateToStep} />
     <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-45px_rgba(14,41,70,.45)] sm:p-8"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-extrabold uppercase tracking-widest text-emerald-700">Step {step} of 10</p><h1 className="mt-2 text-2xl font-extrabold tracking-tight text-[#0e2946]">{steps[step - 1]}</h1></div><p aria-live="polite" className="flex items-center gap-2 text-xs font-bold text-slate-500">{status === "saving" ? <><LoaderCircle className="size-4 animate-spin" />Saving…</> : status === "saved" ? <><Cloud className="size-4 text-emerald-700" />Progress saved</> : "Saved as a draft"}</p></div>
       <div className="mt-7 space-y-5">
-        {step === 1 && <><label className="block text-sm font-bold">School name<input {...register("name")} className={input} onBlur={(event) => { if (!values.slug) setValue("slug", event.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")); }} /></label><label className="block text-sm font-bold">Profile address<input {...register("slug")} className={input} placeholder="greenfield-school" /></label><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">School type<select {...register("schoolType")} className={input}><option value="private">Private</option><option value="public">Public</option><option value="faith_based">Faith-based</option><option value="international">International</option><option value="other">Other</option></select></label><label className="block text-sm font-bold">Year established<input type="number" {...register("yearEstablished")} className={input} /></label></div><label className="block text-sm font-bold">Description <span className="font-semibold text-rose-700">(required to submit)</span><textarea {...register("description")} className={textarea} rows={5} /></label><p className="-mt-3 text-xs leading-5 text-slate-500">Write a short, accurate introduction about the school. Contact details and website are optional.</p><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">Contact email<input type="email" {...register("contactEmail")} className={input} /></label><label className="block text-sm font-bold">Phone<input {...register("contactPhone")} className={input} /></label></div><label className="block text-sm font-bold">Website<input type="url" {...register("websiteUrl")} className={input} placeholder="https://" /></label></>}
+        {step === 1 && <><label className="block text-sm font-bold">School name<input {...register("name")} className={input} onBlur={(event) => { if (!values.slug) setValue("slug", event.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")); }} /></label><label className="block text-sm font-bold">Profile address<input {...register("slug")} className={input} placeholder="greenfield-school" /></label><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">School type<select {...register("schoolType")} className={input}><option value="private">Private</option><option value="public">Public</option><option value="faith_based">Faith-based</option><option value="international">International</option><option value="other">Other</option></select></label><label className="block text-sm font-bold">Year established<input type="number" {...register("yearEstablished")} className={input} /></label></div><label className="block text-sm font-bold">Description <span className="font-semibold text-rose-700">(required to submit)</span><textarea {...register("description")} className={textarea} rows={5} /></label><p className="-mt-3 text-xs leading-5 text-slate-500">Write a short, accurate introduction about the school. Contact details and website are optional.</p><SchoolLogoField initialLogo={initialLogo} previewUrl={logoPreview} uploadSaved={logoUploadSaved} hasSelectedFile={Boolean(logoFile)} disabled={status === "saving"} onSelectFile={(file) => { if (!logoTypes.includes(file.type as typeof logoTypes[number])) { setMessage("Choose a JPEG, PNG or WebP logo."); return; } if (file.size > maxLogoBytes) { setMessage("School logos must be 5 MB or smaller."); return; } setLogoFile(file); setLogoPreview(URL.createObjectURL(file)); setLogoUploadSaved(false); setMessage(""); }} onClearSelection={() => { setLogoFile(null); setLogoPreview(""); setLogoUploadSaved(false); setMessage(""); }} /><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">Contact email<input type="email" {...register("contactEmail")} className={input} /></label><label className="block text-sm font-bold">Phone<input {...register("contactPhone")} className={input} /></label></div><label className="block text-sm font-bold">Website<input type="url" {...register("websiteUrl")} className={input} placeholder="https://" /></label></>}
         {step === 2 && <><div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">Country<input {...register("country")} className={input} /></label><label className="block text-sm font-bold">State<input {...register("state")} className={input} /></label><label className="block text-sm font-bold">City / LGA<input {...register("city")} className={input} /></label><label className="block text-sm font-bold">Area<input {...register("area")} className={input} /></label></div><label className="block text-sm font-bold">Full address <span className="font-semibold text-rose-700">(required to submit)</span><textarea {...register("addressLine")} className={textarea} rows={3} /></label><p className="-mt-3 text-xs leading-5 text-slate-500">Enter the school’s street address or another clear, accurate address parents can use to identify the location.</p><details className="rounded-xl bg-slate-50 p-4"><summary className="text-sm font-bold">Map coordinates (optional)</summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold">Latitude<input {...register("latitude")} className={input} /></label><label className="text-sm font-bold">Longitude<input {...register("longitude")} className={input} /></label></div></details></>}
         {step === 3 && <fieldset><legend className="mb-4 text-sm leading-6 text-slate-600">Select every level currently offered. Choose at least one to submit.</legend><CheckGrid name="levels" options={levelOptions} register={register} /></fieldset>}
         {step === 4 && <div className="grid gap-5 sm:grid-cols-2"><label className="block text-sm font-bold">School structure<select {...register("structure")} className={input}><option value="day">Day</option><option value="boarding">Boarding</option><option value="day_and_boarding">Day & boarding</option></select></label><label className="block text-sm font-bold">Gender<select {...register("gender")} className={input}><option value="mixed">Mixed</option><option value="boys">Boys</option><option value="girls">Girls</option></select></label></div>}

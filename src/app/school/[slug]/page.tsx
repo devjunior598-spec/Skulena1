@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BedDouble, BookOpen, Bus, Check, ChevronRight, Computer, Library, MapPin, Microscope, School, ShieldCheck, Stethoscope, Trees } from "lucide-react";
 import { Header } from "@/components/site/header";
@@ -45,7 +46,7 @@ export default async function SchoolProfilePage({ params }: PageProps) {
             <div>
               <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Verification</span><VerificationBadge level={school.verification} /></div>
               <div className="mt-4 flex items-start justify-between gap-4">
-                <div className="min-w-0"><h1 className="text-balance text-3xl font-extrabold tracking-[-0.045em] text-[#0e2946] sm:text-4xl">{school.name}</h1><p className="mt-3 flex items-start gap-1.5 text-sm font-medium text-slate-500"><MapPin className="size-4 shrink-0 text-emerald-600" /><span>{school.location}</span></p></div>
+                <div className="flex min-w-0 items-center gap-4">{school.logo && <Image src={school.logo} alt={`${school.name} logo`} width={64} height={64} className="size-16 shrink-0 rounded-2xl border border-slate-200 bg-white object-contain p-2" />}<div className="min-w-0"><h1 className="text-balance text-3xl font-extrabold tracking-[-0.045em] text-[#0e2946] sm:text-4xl">{school.name}</h1><p className="mt-3 flex items-start gap-1.5 text-sm font-medium text-slate-500"><MapPin className="size-4 shrink-0 text-emerald-600" /><span>{school.location}</span></p></div></div>
                 <div className="hidden shrink-0 gap-2 sm:flex"><SaveButton slug={slug} name={school.name} /><ShareButton name={school.name} /></div>
               </div>
               <div className="mt-6 flex flex-wrap gap-x-6 gap-y-3 text-sm">

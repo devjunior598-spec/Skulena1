@@ -29,6 +29,7 @@ export type School = {
   classSize: number;
   verification: VerificationLevel;
   image: string | null;
+  logo: string | null;
   images: string[];
   media?: SchoolProfileMedia[];
   description: string;

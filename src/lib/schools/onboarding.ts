@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireAccount } from "@/lib/auth";
 import type { OnboardingValues } from "@/lib/validation/school";
+import { SCHOOL_LOGO_CATEGORY } from "@/types/domain";
 
 export const blankOnboarding: OnboardingValues = {
   step: 1, name: "", slug: "", schoolType: "private", yearEstablished: "", description: "", contactEmail: "", contactPhone: "", websiteUrl: "",
@@ -14,8 +15,8 @@ export async function getOnboardingDraft() {
   const { data: membership } = await supabase.from("school_members").select("school_id, schools(*)").eq("user_id", user.id).eq("role", "owner").eq("is_active", true).limit(1).maybeSingle();
   const schoolRelation = membership?.schools as unknown;
   const school = (Array.isArray(schoolRelation) ? schoolRelation[0] : schoolRelation) as Record<string, unknown> | null | undefined;
-  if (!school) return { values: blankOnboarding, completion: 0, completedSteps: [] as number[] };
-  const [{ data: branch }, { data: levelRows }, { data: curriculumRows }, { data: facilityRows }, { data: fee }, { data: requirements }, { data: completion }, { count: mediaCount }] = await Promise.all([
+  if (!school) return { values: blankOnboarding, completion: 0, completedSteps: [] as number[], initialLogo: null };
+  const [{ data: branch }, { data: levelRows }, { data: curriculumRows }, { data: facilityRows }, { data: fee }, { data: requirements }, { data: completion }, { count: mediaCount }, { data: logoRecord }] = await Promise.all([
     supabase.from("school_branches").select("*").eq("school_id", String(school.id)).eq("is_main", true).maybeSingle(),
     supabase.from("school_levels").select("levels(code)").eq("school_id", String(school.id)),
     supabase.from("school_curricula").select("curricula(code)").eq("school_id", String(school.id)),
@@ -23,8 +24,11 @@ export async function getOnboardingDraft() {
     supabase.from("school_fees").select("amount, category, term, academic_year").eq("school_id", String(school.id)).limit(1).maybeSingle(),
     supabase.from("school_admission_requirements").select("requirement").eq("school_id", String(school.id)).order("sort_order"),
     supabase.rpc("school_profile_completion", { target_school_id: String(school.id) }),
-    supabase.from("school_media").select("id", { count: "exact", head: true }).eq("school_id", String(school.id)),
+    supabase.from("school_media").select("id", { count: "exact", head: true }).eq("school_id", String(school.id)).neq("category", SCHOOL_LOGO_CATEGORY),
+    supabase.from("school_media").select("storage_path, moderation_status").eq("school_id", String(school.id)).eq("category", SCHOOL_LOGO_CATEGORY).eq("media_type", "image").order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
+  const { data: logoUrl } = logoRecord ? await supabase.storage.from("school-media").createSignedUrl(logoRecord.storage_path, 3600) : { data: null };
+  const initialLogo = logoUrl?.signedUrl ? { url: logoUrl.signedUrl, moderationStatus: String(logoRecord?.moderation_status ?? "pending") } : null;
   const completedSteps: number[] = [];
   if (String(school.name ?? "").trim() && String(school.slug ?? "").trim() && String(school.description ?? "").trim()) completedSteps.push(1);
   if (branch?.address_line?.trim()) completedSteps.push(2);
@@ -42,5 +46,5 @@ export async function getOnboardingDraft() {
     levels: (levelRows ?? []).map((row) => { const item = Array.isArray(row.levels) ? row.levels[0] : row.levels; return item?.code; }).filter((value): value is string => Boolean(value)), structure: (school.structure as OnboardingValues["structure"] | null) ?? "day", gender: (school.gender as OnboardingValues["gender"] | null) ?? "mixed",
     curricula: (curriculumRows ?? []).map((row) => { const item = Array.isArray(row.curricula) ? row.curricula[0] : row.curricula; return item?.code; }).filter((value): value is string => Boolean(value)), facilities: (facilityRows ?? []).map((row) => { const item = Array.isArray(row.facilities) ? row.facilities[0] : row.facilities; return item?.code; }).filter((value): value is string => Boolean(value)),
     feeAmount: fee?.amount ?? "", feeCategory: (fee?.category as OnboardingValues["feeCategory"] | null) ?? "tuition", feeTerm: fee?.term ?? "", academicYear: fee?.academic_year ?? "", admissionStatus: (school.admission_status as OnboardingValues["admissionStatus"] | null) ?? "closed", admissionDescription: String(school.admission_description ?? ""), requirements: (requirements ?? []).map((row) => row.requirement).join("\n"),
-  } satisfies OnboardingValues, completedSteps };
+  } satisfies OnboardingValues, completedSteps, initialLogo };
 }

@@ -16,9 +16,10 @@ export function SchoolCard({ school, horizontal = false }: { school: School; hor
         <SaveSchoolButton slug={school.slug} name={school.name} iconOnly className="absolute right-3 top-3 z-20 size-10 rounded-full border-0 bg-white/95 shadow-sm" />
       </div>
       <div className="p-4.5 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="size-3.5 text-emerald-600" />{school.location}</p>
+        <div className="flex items-start gap-3">
+          {school.logo ? <span className="relative size-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white"><Image src={school.logo} alt="" aria-hidden="true" fill sizes="48px" className="object-contain p-1.5" /></span> : <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><GraduationCap className="size-6" aria-hidden="true" /></span>}
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="size-3.5 shrink-0 text-emerald-600" />{school.location}</p>
             <h3 className="mt-2 text-lg font-extrabold leading-tight tracking-[-0.025em] text-[#0e2946]"><Link href={`/school/${school.slug}`} className="after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:rounded-[1.35rem] focus-visible:after:ring-4 focus-visible:after:ring-inset focus-visible:after:ring-emerald-500">{school.name}</Link></h3>
           </div>
         </div>

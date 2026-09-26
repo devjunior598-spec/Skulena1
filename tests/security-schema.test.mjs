@@ -9,6 +9,10 @@ const authActions = readFileSync(new URL("../src/app/auth/actions.ts", import.me
 const authCallback = readFileSync(new URL("../src/app/auth/callback/route.ts", import.meta.url), "utf8");
 const registrationActions = readFileSync(new URL("../src/app/for-schools/register/actions.ts", import.meta.url), "utf8");
 const registrationForm = readFileSync(new URL("../src/components/school/onboarding-form.tsx", import.meta.url), "utf8");
+const homepage = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+const publicSchoolLoader = readFileSync(new URL("../src/lib/schools/public-schools.ts", import.meta.url), "utf8");
+const schoolCard = readFileSync(new URL("../src/components/schools/school-card.tsx", import.meta.url), "utf8");
+const mediaActions = readFileSync(new URL("../src/app/school/(portal)/media/actions.ts", import.meta.url), "utf8");
 
 test("all required application tables are migrated", () => {
   for (const table of ["profiles", "parent_profiles", "children", "schools", "school_branches", "school_members", "school_levels", "school_classes", "school_curricula", "school_facilities", "school_media", "school_fees", "school_documents", "verification_records", "inspections", "inspection_items", "saved_schools", "reviews", "review_responses", "notifications", "audit_logs"]) {
@@ -72,4 +76,20 @@ test("school submission requirements are explained before the database guard rej
   assert.match(registrationActions, /missing\.map\(\(requirement\) => requirement\.label\)/);
   assert.match(registrationForm, /Required before submission/);
   assert.match(registrationForm, /Go to step/);
+});
+
+test("homepage lists published schools directly instead of a marketing hero", () => {
+  assert.match(homepage, /getPublicSchools\(\)/);
+  assert.match(homepage, /schools\.map\(\(school\) => <SchoolCard/);
+  assert.doesNotMatch(homepage, /Find a school that feels right|nigerian-primary-classroom|nigerian-school-library/);
+  assert.match(publicSchoolLoader, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(security, /where s\.status = 'published'/);
+});
+
+test("school logos upload through scoped media and only approved logos are public", () => {
+  assert.match(registrationForm, /SCHOOL_LOGO_CATEGORY/);
+  assert.match(registrationForm, /school-media/);
+  assert.match(mediaActions, /SCHOOL_LOGO_CATEGORY/);
+  assert.match(publicSchoolLoader, /eq\("moderation_status", "approved"\)/);
+  assert.match(schoolCard, /school\.logo/);
 });
