@@ -1,7 +1,7 @@
 import type { School } from "@/data/schools";
-import type { SchoolProfileImage } from "@/data/schools";
+import type { SchoolProfileMedia } from "@/data/schools";
 
-export type ProfileMedia = SchoolProfileImage;
+export type ProfileMedia = SchoolProfileMedia;
 
 export type SchoolProfileDetails = {
   story: string;
@@ -27,6 +27,7 @@ export function getSchoolProfile(school: School): SchoolProfileDetails {
       category: "Campus",
       caption: "School media",
       alt: `${school.name} campus media`,
+      mediaType: "image" as const,
     })),
   };
 }

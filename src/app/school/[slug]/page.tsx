@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 const facilityIcons = { "Science Laboratory": Microscope, "ICT Laboratory": Computer, Library, Sports: School, Playground: Trees, Transportation: Bus, "Sick Bay": Stethoscope, Boarding: BedDouble, Security: ShieldCheck };
-const profileSections = [{ name: "Overview", id: "overview" }, { name: "Facilities", id: "facilities" }, { name: "Fees", id: "fees" }, { name: "Admissions", id: "admissions" }, { name: "Photos", id: "photos" }, { name: "Reviews", id: "reviews" }];
+const profileSections = [{ name: "Overview", id: "overview" }, { name: "Facilities", id: "facilities" }, { name: "Fees", id: "fees" }, { name: "Admissions", id: "admissions" }, { name: "Photos & videos", id: "photos" }, { name: "Reviews", id: "reviews" }];
 
 export default async function SchoolProfilePage({ params }: PageProps) {
   const { slug } = await params;
@@ -76,7 +76,7 @@ export default async function SchoolProfilePage({ params }: PageProps) {
 
             <section id="admissions" className="scroll-mt-36 border-t border-slate-200 pt-10"><h2 className="text-2xl font-extrabold tracking-tight text-[#0e2946]">Admissions</h2><p className="mt-4 text-sm leading-7 text-slate-600">{profile.admissions.status}</p></section>
 
-            <section id="photos" className="scroll-mt-36 border-t border-slate-200 pt-10"><h2 className="text-2xl font-extrabold tracking-tight text-[#0e2946]">Photos</h2><p className="mb-6 mt-2 text-sm leading-6 text-slate-500">School photos and videos shared for this profile.</p><ProfileGallery media={profile.media} /></section>
+            <section id="photos" className="scroll-mt-36 border-t border-slate-200 pt-10"><h2 className="text-2xl font-extrabold tracking-tight text-[#0e2946]">Photos & videos</h2><p className="mb-6 mt-2 text-sm leading-6 text-slate-500">School media shared for this profile. Videos are available after approval.</p><ProfileGallery media={profile.media} /></section>
 
             <section id="reviews" className="scroll-mt-36 border-t border-slate-200 pt-10"><h2 className="text-2xl font-extrabold tracking-tight text-[#0e2946]">Parent reviews</h2><p className="mt-4 rounded-2xl bg-slate-50 p-5 text-sm text-slate-600">No parent reviews are currently available for this school.</p></section>
           </div>
