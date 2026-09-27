@@ -1,10 +1,11 @@
-import { ClipboardCheck, ExternalLink, Image as ImageIcon, MapPin, ShieldCheck } from "lucide-react";
+import Image from "next/image";
+import { Check, ClipboardCheck, ExternalLink, Image as ImageIcon, MapPin, ShieldCheck, X } from "lucide-react";
 import { EmptyState } from "@/components/portal/empty-state";
 import { PageHeading } from "@/components/portal/page-heading";
 import { Button } from "@/components/ui/button";
 import { requireAccount } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { changeSchoolReviewStatus } from "./actions";
+import { changeSchoolReviewStatus, moderateSchoolLogo } from "./actions";
 
 type SchoolBranch = {
   school_id: string;
@@ -25,11 +26,21 @@ type SchoolMedia = {
   moderation_status: string;
   storage_path: string;
 };
+type PendingSchoolLogo = {
+  id: string;
+  school_id: string;
+  storage_path: string;
+  caption: string | null;
+  created_at: string;
+};
+type LogoSchool = { id: string; name: string; slug: string; status: string };
 
 const noticeMessages: Record<string, string> = {
   under_review: "The profile is now marked as under review.",
   published: "The school profile is published and visible in the directory.",
   rejected: "The profile is marked as changes needed. Contact the school separately with guidance.",
+  logo_approved: "Logo approved. It will now appear on the school’s public card and profile.",
+  logo_rejected: "Logo rejected and kept private. The school can upload a different image.",
 };
 
 const errorMessages: Record<string, string> = {
@@ -41,6 +52,11 @@ const errorMessages: Record<string, string> = {
   already_changed: "This profile’s status changed. Refresh the queue before taking another action.",
   details_incomplete: "This profile is missing a required description, address, learning level, or curriculum. Ask the school to update and resubmit it before publishing.",
   update_failed: "We couldn’t update the school status. No change was made; please try again.",
+  logo_invalid_action: "That logo review action was invalid. Refresh the queue and try again.",
+  logo_unavailable: "The logo review service is unavailable. Please try again shortly.",
+  logo_not_found: "That school logo is no longer available in the review queue.",
+  logo_already_reviewed: "That logo has already been reviewed. Refresh the queue to see the latest status.",
+  logo_update_failed: "We couldn’t update the logo decision. No change was made; please try again.",
 };
 
 function relationName(value: unknown): string | null {
@@ -100,6 +116,22 @@ export default async function AdminReviewPage({
     { data: [], error: null }, { data: [], error: null }, { data: [], error: null },
   ];
 
+  const { data: pendingLogoData, error: pendingLogoError } = await supabase
+    .from("school_media")
+    .select("id, school_id, storage_path, caption, created_at")
+    .ilike("category", "School logo")
+    .eq("media_type", "image")
+    .eq("moderation_status", "pending")
+    .order("created_at", { ascending: true })
+    .limit(50);
+  const pendingLogos = (pendingLogoData ?? []) as PendingSchoolLogo[];
+  const pendingLogoSchoolIds = [...new Set(pendingLogos.map((logo) => logo.school_id))];
+  const { data: pendingSchoolData, error: pendingSchoolError } = pendingLogoSchoolIds.length
+    ? await supabase.from("schools").select("id, name, slug, status").in("id", pendingLogoSchoolIds)
+    : { data: [], error: null };
+  const logoSchools = (pendingSchoolData ?? []) as LogoSchool[];
+  const logoSchoolById = new Map(logoSchools.map((school) => [school.id, school]));
+
   const relationErrors = [branchResult.error, levelResult.error, curriculumResult.error, facilityResult.error, feeResult.error, requirementResult.error, mediaResult.error];
   const detailsUnavailable = relationErrors.some(Boolean);
   const branches = (branchResult.data ?? []) as SchoolBranch[];
@@ -133,10 +165,12 @@ export default async function AdminReviewPage({
 
   const submittedCount = schoolRows.filter((school) => school.status === "submitted").length;
   const reviewCount = schoolRows.filter((school) => school.status === "under_review").length;
-  const mediaPaths = media.map((item) => item.storage_path);
+  const mediaPaths = [...new Set([...media.map((item) => item.storage_path), ...pendingLogos.map((item) => item.storage_path)])];
   const signedResult = mediaPaths.length ? await supabase.storage.from("school-media").createSignedUrls(mediaPaths, 600) : null;
   const signedUrls = new Map((signedResult?.data ?? []).flatMap((item) => item.signedUrl ? [[item.path, item.signedUrl] as [string, string]] : []));
   const mediaPreviewUnavailable = media.some((item) => !signedUrls.has(item.storage_path));
+  const pendingLogoPreviewUnavailable = pendingLogos.some((item) => !signedUrls.has(item.storage_path));
+  const canModerateLogos = profile.role === "moderator" || profile.role === "admin" || profile.role === "super_admin";
 
   return (
     <>
@@ -146,9 +180,10 @@ export default async function AdminReviewPage({
         description="Review the details families will see, then move each submission through a deliberate approval decision."
       />
 
-      <div className="mt-7 grid gap-3 sm:grid-cols-2">
+      <div className="mt-7 grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Awaiting review</p><p className="mt-2 text-3xl font-extrabold text-[#0e2946]">{submittedCount}</p></div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">In review</p><p className="mt-2 text-3xl font-extrabold text-[#0e2946]">{reviewCount}</p></div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5"><p className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Logos awaiting review</p><p className="mt-2 text-3xl font-extrabold text-[#0e2946]">{pendingLogos.length}</p></div>
       </div>
 
       <div className="mt-5 space-y-3">
@@ -157,7 +192,48 @@ export default async function AdminReviewPage({
         {schoolsError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">We couldn’t load the review queue. Please refresh and try again.</p>}
         {detailsUnavailable && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">Some profile details could not be loaded. Do not make a publication decision until they are available.</p>}
         {(signedResult?.error || mediaPreviewUnavailable) && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">One or more media previews could not be prepared. Wait to make a decision until the uploaded files can be checked.</p>}
+        {pendingLogoError || pendingSchoolError ? <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">Pending school logos could not be loaded. Refresh the page before approving any logo.</p> : null}
+        {pendingLogoPreviewUnavailable && <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-950">One or more pending logos could not be previewed, so their approval controls are disabled.</p>}
       </div>
+
+      <section aria-labelledby="logo-review-heading" className="mt-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id="logo-review-heading" className="text-lg font-extrabold text-[#0e2946]">School logos awaiting review</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-600">Approve a logo after checking it. Approved logos appear on the school card and public profile.</p>
+          </div>
+          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-900">{pendingLogos.length} pending</span>
+        </div>
+        {pendingLogos.length ? <ul className="mt-4 divide-y divide-slate-100">
+          {pendingLogos.map((logo) => {
+            const school = logoSchoolById.get(logo.school_id);
+            const signedUrl = signedUrls.get(logo.storage_path);
+            const canAct = canModerateLogos && Boolean(signedUrl) && !pendingLogoError && !pendingSchoolError;
+            return <li key={logo.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center">
+              <div className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                {signedUrl ? <Image src={signedUrl} alt={`${school?.name ?? "School"} logo pending review`} fill sizes="64px" className="object-contain p-1.5" /> : <ImageIcon className="size-6 text-slate-400" aria-hidden="true" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-extrabold text-[#0e2946]">{school?.name ?? "School profile unavailable"}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{school ? `${pretty(school.status)} profile · ` : ""}Logo uploaded {new Date(logo.created_at).toLocaleDateString("en-NG", { dateStyle: "medium" })}{logo.caption ? ` · ${logo.caption}` : ""}</p>
+              </div>
+              {signedUrl && <a href={signedUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1 text-xs font-bold text-emerald-800 underline-offset-2 hover:underline">Preview full image <ExternalLink className="size-3.5" aria-hidden="true" /></a>}
+              {canModerateLogos ? <div className="flex shrink-0 items-center gap-2">
+                <form action={moderateSchoolLogo}>
+                  <input type="hidden" name="mediaId" value={logo.id} />
+                  <input type="hidden" name="decision" value="approved" />
+                  <Button size="sm" disabled={!canAct}><Check className="size-4" aria-hidden="true" />Approve</Button>
+                </form>
+                <form action={moderateSchoolLogo}>
+                  <input type="hidden" name="mediaId" value={logo.id} />
+                  <input type="hidden" name="decision" value="rejected" />
+                  <Button size="sm" variant="outline" className="text-rose-800" disabled={!canAct}><X className="size-4" aria-hidden="true" />Reject</Button>
+                </form>
+              </div> : <span className="text-xs font-semibold text-slate-500">Trust staff only</span>}
+            </li>;
+          })}
+        </ul> : <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">No school logos are waiting for review.</p>}
+      </section>
 
       {!schoolsError && schoolRows.length === 0 ? (
         <div className="mt-7"><EmptyState icon={ClipboardCheck} title="No school submissions waiting" description="New profiles will appear here after a school owner submits them for review." /></div>

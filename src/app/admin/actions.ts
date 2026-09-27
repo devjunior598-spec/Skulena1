@@ -5,11 +5,17 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAccount } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { SCHOOL_LOGO_CATEGORY } from "@/types/domain";
 
 const schoolReviewSchema = z.object({
   schoolId: z.string().uuid(),
   status: z.enum(["under_review", "published", "rejected"]),
   confirm: z.enum(["yes"]).optional(),
+});
+
+const schoolLogoReviewSchema = z.object({
+  mediaId: z.string().uuid(),
+  decision: z.enum(["approved", "rejected"]),
 });
 
 function returnToAdmin(message: string): never {
@@ -61,4 +67,47 @@ export async function changeSchoolReviewStatus(formData: FormData) {
   revalidatePath("/schools");
   revalidatePath(`/school/${school.slug}`);
   returnToAdmin(status);
+}
+
+export async function moderateSchoolLogo(formData: FormData) {
+  await requireAccount(["moderator", "admin", "super_admin"]);
+  const parsed = schoolLogoReviewSchema.safeParse({
+    mediaId: formData.get("mediaId"),
+    decision: formData.get("decision"),
+  });
+  if (!parsed.success) returnToAdmin("error=logo_invalid_action");
+
+  const supabase = await createClient();
+  if (!supabase) returnToAdmin("error=logo_unavailable");
+
+  const { mediaId, decision } = parsed.data;
+  const { data: media, error: mediaError } = await supabase
+    .from("school_media")
+    .select("id, school_id, category, media_type, moderation_status")
+    .eq("id", mediaId)
+    .maybeSingle();
+
+  if (mediaError || !media || media.category.trim().toLowerCase() !== SCHOOL_LOGO_CATEGORY.toLowerCase() || media.media_type !== "image") {
+    returnToAdmin("error=logo_not_found");
+  }
+  if (media.moderation_status !== "pending") returnToAdmin("error=logo_already_reviewed");
+
+  const { data: updated, error: updateError } = await supabase
+    .from("school_media")
+    .update({ moderation_status: decision })
+    .eq("id", mediaId)
+    .eq("moderation_status", "pending")
+    .select("id")
+    .maybeSingle();
+
+  if (updateError || !updated) {
+    console.error("[admin-logo-review] logo moderation failed", { code: updateError?.code ?? "not_updated" });
+    returnToAdmin("error=logo_update_failed");
+  }
+
+  const { data: school } = await supabase.from("schools").select("slug").eq("id", media.school_id).maybeSingle();
+  revalidatePath("/");
+  revalidatePath("/schools");
+  if (school?.slug) revalidatePath(`/school/${school.slug}`);
+  returnToAdmin(decision === "approved" ? "logo_approved" : "logo_rejected");
 }
