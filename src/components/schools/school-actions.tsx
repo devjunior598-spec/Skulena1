@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, Heart, Share2 } from "lucide-react";
+import Link from "next/link";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toggleSavedSchool } from "@/app/saved/actions";
@@ -10,13 +11,15 @@ import { createClient } from "@/lib/supabase/client";
 
 type ActionAppearance = Pick<ButtonProps, "className" | "variant" | "size">;
 
-export function SaveSchoolButton({ slug, name, iconOnly = false, className, variant = "outline", size }: ActionAppearance & { slug: string; name: string; iconOnly?: boolean }) {
-  const [remoteSaved, setRemoteSaved] = useState<boolean | null>(null);
+export function SaveSchoolButton({ slug, name, iconOnly = false, className, variant = "outline", size, initialSaved }: ActionAppearance & { slug: string; name: string; iconOnly?: boolean; initialSaved?: boolean }) {
+  const id = useId();
+  const [remoteSaved, setRemoteSaved] = useState<boolean | null>(initialSaved ?? null);
   const saved = remoteSaved ?? false;
   const [announcement, setAnnouncement] = useState("");
   const [needsSignIn, setNeedsSignIn] = useState(false);
   const signInDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
+    if (initialSaved !== undefined) return;
     if (!hasSupabaseConfig()) return;
     const supabase = createClient();
     void (async () => {
@@ -28,7 +31,7 @@ export function SaveSchoolButton({ slug, name, iconOnly = false, className, vari
       const { data } = await supabase.from("saved_schools").select("school_id").eq("parent_id", user.id).eq("school_id", school.id).maybeSingle();
       setRemoteSaved(Boolean(data));
     })();
-  }, [slug]);
+  }, [slug, initialSaved]);
   return (
     <>
       <Button
@@ -49,7 +52,7 @@ export function SaveSchoolButton({ slug, name, iconOnly = false, className, vari
         {!iconOnly && (saved ? "Saved" : "Save school")}
       </Button>
       <span className="sr-only" role="status">{announcement}</span>
-      <dialog ref={signInDialog} className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"><h2 className="text-xl font-extrabold text-[#0e2946]">Sign in to save schools</h2><p className="mt-3 text-sm leading-6 text-slate-600">A parent account keeps your shortlist private and available across devices.</p><div className="mt-6 flex gap-3"><Button asChild><a href={`/sign-in?next=${encodeURIComponent(`/school/${slug}`)}`}>Sign in</a></Button><Button variant="outline" type="button" onClick={() => { setNeedsSignIn(false); signInDialog.current?.close(); }}>Not now</Button></div><span className="sr-only">{needsSignIn ? "Sign in is required." : ""}</span></dialog>
+      <dialog ref={signInDialog} aria-labelledby={`${id}-title`} className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl backdrop:bg-slate-950/45"><h2 id={`${id}-title`} className="text-xl font-extrabold text-[#0e2946]">Sign in to save schools</h2><p className="mt-3 text-sm leading-6 text-slate-600">A parent account keeps your shortlist private and available across devices.</p><div className="mt-6 flex flex-wrap gap-3"><Button asChild><Link href={`/sign-in?next=${encodeURIComponent(`/school/${slug}`)}`}>Sign in</Link></Button><Button variant="outline" asChild><Link href="/sign-up">Create parent account</Link></Button><Button variant="ghost" type="button" onClick={() => { setNeedsSignIn(false); signInDialog.current?.close(); }}>Not now</Button></div><span className="sr-only">{needsSignIn ? "Sign in or create an account to save this school." : ""}</span></dialog>
     </>
   );
 }

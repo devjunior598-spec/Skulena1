@@ -10,6 +10,7 @@ const authCallback = readFileSync(new URL("../src/app/auth/callback/route.ts", i
 const registrationActions = readFileSync(new URL("../src/app/for-schools/register/actions.ts", import.meta.url), "utf8");
 const registrationForm = readFileSync(new URL("../src/components/school/onboarding-form.tsx", import.meta.url), "utf8");
 const homepage = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+const homepageContent = readFileSync(new URL("../src/components/site/homepage-content.tsx", import.meta.url), "utf8");
 const publicSchoolLoader = readFileSync(new URL("../src/lib/schools/public-schools.ts", import.meta.url), "utf8");
 const schoolCard = readFileSync(new URL("../src/components/schools/school-card.tsx", import.meta.url), "utf8");
 const mediaActions = readFileSync(new URL("../src/app/school/(portal)/media/actions.ts", import.meta.url), "utf8");
@@ -88,11 +89,24 @@ test("school submission checklist selects existing join-table keys", () => {
   assert.doesNotMatch(registrationActions, /from\("school_(?:levels|curricula)"\)\.select\("id"\)/);
 });
 
-test("homepage lists published schools directly instead of a marketing hero", () => {
-  assert.match(homepage, /getPublicSchools\(\)/);
-  assert.match(homepage, /schools\.map\(\(school\) => <SchoolCard/);
-  assert.doesNotMatch(homepage, /Find a school that feels right|nigerian-primary-classroom|nigerian-school-library/);
+test("homepage uses the approved discovery design without inventing school data", () => {
+  assert.match(homepage, /getPublicSchools\(\{ limit: HOME_SCHOOL_LIMIT \}\)/);
+  assert.match(homepage, /getPublicSchoolPayStatus\(\)/);
+  assert.match(homepageContent, /Find the right school/);
+  assert.match(homepageContent, /<SearchBox/);
+  assert.match(homepageContent, /Explore published schools/);
+  assert.match(homepageContent, /schools\.map\(\(school\) => <SchoolCard/);
+  assert.match(homepageContent, /Schools are being added to Skulena\./);
+  assert.match(homepageContent, /schoolPay\.available \? /);
+  assert.match(homepageContent, /Financing is subject to eligibility, assessment, provider terms and availability/);
+  assert.doesNotMatch(homepageContent, /Brightfield|sample school|fake school|five-star rating/i);
+  assert.match(publicSchoolLoader, /from\("public_school_profiles"\)/);
+  assert.match(publicSchoolLoader, /options\.limit/);
   assert.match(publicSchoolLoader, /\.range\(from, from \+ pageSize - 1\)/);
+  assert.match(publicSchoolLoader, /from\("public_verification_records"\)/);
+  assert.match(publicSchoolLoader, /feePublished: tuitionAmounts\.length > 0/);
+  assert.doesNotMatch(schoolCard, /school\.rating|school\.reviewCount/);
+  assert.match(schoolCard, /school\.feePublished \? formatNaira/);
   assert.match(security, /where s\.status = 'published'/);
 });
 

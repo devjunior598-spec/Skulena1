@@ -89,11 +89,14 @@ export type School = {
   publicReviews?: PublicSchoolReview[];
   feeFrom: number;
   feeTo: number;
+  feePublished?: boolean;
   rating: number;
   reviewCount: number;
   classSize: number;
   verification: VerificationLevel;
   image: string | null;
+  imageAlt?: string;
+  hasApprovedCover?: boolean;
   logo: string | null;
   images: string[];
   media?: SchoolProfileMedia[];

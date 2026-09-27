@@ -84,7 +84,7 @@ export function filterSchools(schools: School[], filters: SchoolFilters): School
   const anyMatch = (selected: string[], offered: string[]) => !selected.length || selected.some((item) => offered.some((offer) => normalize(offer) === item));
   const verificationRank = { "physically-verified": 2, "document-verified": 1, "school-provided": 0 };
   const matches = schools.filter((school) => {
-    const searchable = normalize([school.name, school.location, ...school.curriculum, ...school.levels, ...school.tags].join(" "));
+    const searchable = normalize([school.name, school.location, school.city, ...school.curriculum, ...school.levels, ...school.tags].join(" "));
     if (filters.q && !normalize(filters.q).split(/\s+/).every((word) => searchable.includes(word))) return false;
     if (filters.city && normalize(school.city) !== normalize(filters.city)) return false;
     if (filters.area && !normalize(school.location).includes(normalize(filters.area))) return false;
@@ -93,17 +93,21 @@ export function filterSchools(schools: School[], filters: SchoolFilters): School
     if (filters.type.length && !filters.type.some((type) => normalize(school.type ?? "").includes(type))) return false;
     if (filters.verification.length && !filters.verification.includes(school.verification)) return false;
     if (filters.facility.length && !filters.facility.every((facility) => school.facilities.some((item) => normalize(item) === facility))) return false;
+    if ((filters.minFee || filters.maxFee) && !school.feePublished) return false;
     if (filters.minFee && school.feeTo < Number(filters.minFee)) return false;
     if (filters.maxFee && school.feeFrom > Number(filters.maxFee)) return false;
     if (filters.minFee && filters.maxFee && Number(filters.minFee) > Number(filters.maxFee)) return false;
-    if (filters.classSize && school.classSize > Number(filters.classSize)) return false;
+    if (filters.classSize && (!school.classSize || school.classSize > Number(filters.classSize))) return false;
     if (filters.transport && !school.facilities.includes("Transportation")) return false;
     if (filters.special && !school.tags.some((tag) => normalize(tag).includes("special needs"))) return false;
     return true;
   });
 
   return matches.sort((a, b) => {
-    if (filters.sort === "fees") return a.feeFrom - b.feeFrom || a.name.localeCompare(b.name);
+    if (filters.sort === "fees") {
+      if (Boolean(a.feePublished) !== Boolean(b.feePublished)) return a.feePublished ? -1 : 1;
+      return (a.feePublished ? a.feeFrom - b.feeFrom : 0) || a.name.localeCompare(b.name);
+    }
     if (filters.sort === "rating") return b.rating - a.rating || b.reviewCount - a.reviewCount;
     if (filters.sort === "class-size") return a.classSize - b.classSize || a.name.localeCompare(b.name);
     if (filters.sort === "name") return a.name.localeCompare(b.name);

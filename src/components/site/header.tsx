@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowUpRight, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getCurrentAccount, roleHome } from "@/lib/auth";
 import { Logo } from "./logo";
 
 const links = [
@@ -17,7 +18,16 @@ function SchoolSearch({ mobile = false }: { mobile?: boolean }) {
   </form>;
 }
 
-export function Header({ accountHref }: { accountHref?: string | null }) {
+export async function Header({ accountHref }: { accountHref?: string | null }) {
+  let destination = accountHref;
+  if (destination === undefined) {
+    try {
+      const account = await getCurrentAccount();
+      destination = account?.profile ? roleHome(account.profile.role) : null;
+    } catch {
+      destination = null;
+    }
+  }
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-xl">
       <div className="relative mx-auto flex min-h-[4.5rem] max-w-7xl items-center justify-between gap-2 px-4 sm:px-8 lg:px-10">
@@ -27,14 +37,14 @@ export function Header({ accountHref }: { accountHref?: string | null }) {
         </nav>
         <SchoolSearch />
         <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-          {accountHref ? <Button asChild><Link href={accountHref}>My account <ArrowUpRight className="size-3.5" aria-hidden="true" /></Link></Button> : <>
+          {destination ? <Button asChild><Link href={destination}>My account <ArrowUpRight className="size-3.5" aria-hidden="true" /></Link></Button> : <>
             <Button variant="ghost" asChild><Link href="/sign-in">Log in</Link></Button>
             <Button asChild><Link href="/sign-up">Sign up</Link></Button>
           </>}
         </div>
         <div className="flex shrink-0 items-center gap-1 md:hidden">
-          {!accountHref && <Button variant="ghost" size="sm" asChild><Link href="/sign-in">Log in</Link></Button>}
-          {accountHref && <Button variant="ghost" size="sm" asChild><Link href={accountHref}>Account</Link></Button>}
+          {!destination && <Button variant="ghost" size="sm" asChild><Link href="/sign-in">Log in</Link></Button>}
+          {destination && <Button variant="ghost" size="sm" asChild><Link href={destination}>Account</Link></Button>}
           <details className="group relative">
             <summary aria-label="Open navigation menu" className="grid size-11 list-none place-items-center rounded-xl border border-slate-200 text-[#0e2946] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
               <Menu className="size-5" aria-hidden="true" />
@@ -44,8 +54,8 @@ export function Header({ accountHref }: { accountHref?: string | null }) {
               <nav aria-label="Mobile navigation" className="mt-2">
                 {links.map((link) => <Link key={link.label} href={link.href} className="block min-h-11 rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-800">{link.label}</Link>)}
               </nav>
-              {!accountHref && <Link href="/sign-up" className="mt-1 flex min-h-11 items-center justify-between rounded-xl bg-emerald-700 px-3 py-3 text-sm font-bold text-white hover:bg-emerald-800">Create an account <ArrowUpRight className="size-4" aria-hidden="true" /></Link>}
-              {accountHref && <Link href={accountHref} className="mt-1 flex min-h-11 items-center justify-between rounded-xl bg-emerald-700 px-3 py-3 text-sm font-bold text-white hover:bg-emerald-800">My account <ArrowUpRight className="size-4" aria-hidden="true" /></Link>}
+              {!destination && <Link href="/sign-up" className="mt-1 flex min-h-11 items-center justify-between rounded-xl bg-emerald-700 px-3 py-3 text-sm font-bold text-white hover:bg-emerald-800">Create an account <ArrowUpRight className="size-4" aria-hidden="true" /></Link>}
+              {destination && <Link href={destination} className="mt-1 flex min-h-11 items-center justify-between rounded-xl bg-emerald-700 px-3 py-3 text-sm font-bold text-white hover:bg-emerald-800">My account <ArrowUpRight className="size-4" aria-hidden="true" /></Link>}
             </div>
           </details>
         </div>

@@ -1,35 +1,74 @@
 import Image from "next/image";
 import Link from "next/link";
-import { GraduationCap, MapPin } from "lucide-react";
+import { BadgeCheck, FileCheck2, GraduationCap, MapPin } from "lucide-react";
 import type { School } from "@/data/schools";
 import { formatNaira } from "@/data/schools";
 import { cn } from "@/lib/utils";
 import { SaveSchoolButton } from "./school-actions";
 
-export function SchoolCard({ school, horizontal = false, compact = false }: { school: School; horizontal?: boolean; compact?: boolean }) {
+function VerificationMarker({ school }: { school: School }) {
+  if (school.verification === "school-provided") return null;
+  const physicallyChecked = school.verification === "physically-verified";
+  const Icon = physicallyChecked ? BadgeCheck : FileCheck2;
+  const label = physicallyChecked ? "On-site check recorded" : "Documents reviewed";
+  return <span className="pointer-events-none absolute bottom-3 left-3 z-10 inline-flex min-h-8 items-center gap-1.5 rounded-full border border-white/70 bg-white/95 px-3 py-1.5 text-[11px] font-extrabold text-[#123a32] shadow-sm backdrop-blur"><Icon className="size-3.5 shrink-0 text-emerald-800" aria-hidden="true" />{label}<span className="sr-only">for some school information; see the profile for details</span></span>;
+}
+
+export function SchoolCard({ school, horizontal = false, initialSaved, showSave = true, headingLevel = 2 }: {
+  school: School;
+  horizontal?: boolean;
+  initialSaved?: boolean;
+  showSave?: boolean;
+  headingLevel?: 2 | 3;
+}) {
   const initials = (school.shortName || school.name).trim().split(/[\s-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "S";
+  const location = school.location || school.city;
+  const visibleLevels = school.levels.slice(0, 3);
+  const remainingLevels = school.levels.length - visibleLevels.length;
+  const Heading = headingLevel === 3 ? "h3" : "h2";
+
   return (
-    <article className={cn("group relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white transition duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_18px_44px_-28px_rgba(15,41,70,0.42)]", horizontal && "sm:grid sm:grid-cols-[220px_1fr]")}>
-      <div className={cn("relative overflow-hidden bg-slate-100", horizontal ? "aspect-[4/3] sm:aspect-auto sm:min-h-57" : compact ? "aspect-[16/9]" : "aspect-[4/3]")}>
-        {school.image ? <Image src={school.image} alt={`${school.name} school media`} fill sizes={horizontal ? "(max-width: 640px) 100vw, 220px" : compact ? "(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw" : "(max-width: 768px) 100vw, 33vw"} className="object-cover transition duration-500 group-hover:scale-[1.03]" /> : <div aria-label="School photo not available" className="absolute inset-0 grid place-items-center bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-100"><GraduationCap className={cn("text-emerald-800/70", compact ? "size-10" : "size-14")} aria-hidden="true" /></div>}
-        <SaveSchoolButton slug={school.slug} name={school.name} iconOnly className={cn("absolute z-20 rounded-full border-0 bg-white/95 shadow-sm", compact ? "right-2 top-2 size-9" : "right-3 top-3 size-10")} />
+    <article className={cn("group relative w-full max-w-[25rem] overflow-hidden rounded-[1.5rem] border border-slate-200/90 bg-white shadow-[0_8px_28px_-22px_rgba(15,41,70,0.55)] transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-[0_22px_45px_-28px_rgba(15,41,70,0.4)]", horizontal && "max-w-none sm:grid sm:grid-cols-[250px_minmax(0,1fr)]")}>
+      <div className={cn("relative overflow-hidden bg-[#e9f1eb]", horizontal ? "aspect-[16/9] sm:aspect-auto sm:min-h-[220px]" : "aspect-[16/10]")}>
+        {school.image ? <Image src={school.image} alt={school.imageAlt || `Campus photo for ${school.name}`} fill sizes={horizontal ? "(max-width: 640px) 100vw, 250px" : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 400px"} className="object-cover transition duration-500 group-hover:scale-[1.035]" /> : (
+          <div className="absolute inset-0 grid place-content-center justify-items-center gap-2 bg-[radial-gradient(circle_at_20%_20%,#ffffff_0,transparent_40%),linear-gradient(135deg,#e0efe5,#edf4f8)] px-4 text-center">
+            <span className="grid size-14 place-items-center rounded-2xl border border-white/80 bg-white/80 text-emerald-900 shadow-sm"><GraduationCap className="size-7" aria-hidden="true" /></span>
+            <span className="text-xs font-bold text-slate-600">{school.hasApprovedCover ? "Photo temporarily unavailable" : "No approved cover photo"}</span>
+          </div>
+        )}
+        {showSave && <SaveSchoolButton slug={school.slug} name={school.name} iconOnly initialSaved={initialSaved} className="absolute right-3 top-3 z-20 size-11 rounded-full border border-white/80 bg-white/95 text-[#0e2946] shadow-sm backdrop-blur hover:border-rose-200 hover:bg-white hover:text-rose-600" />}
+        <VerificationMarker school={school} />
       </div>
-      <div className={cn("p-4.5 sm:p-5", compact && "p-3 sm:p-3.5")}>
-        <div className={cn("flex items-start gap-3", compact && "gap-2.5")}>
-          {school.logo ? <span className={cn("relative shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white", compact ? "size-11" : "size-12")}><Image src={school.logo} alt="" aria-hidden="true" fill sizes={compact ? "44px" : "48px"} className="object-contain p-1.5" /></span> : <span aria-label={`${school.name} logo not uploaded`} className={cn("grid shrink-0 place-items-center rounded-xl bg-emerald-50 font-extrabold tracking-wide text-emerald-900", compact ? "size-11 text-xs" : "size-12 text-sm")}>{initials}</span>}
+
+      <div className="p-4 sm:p-5">
+        <div className="flex min-w-0 items-center gap-3">
+          {school.logo ? (
+            <span className="relative size-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+              <Image src={school.logo} alt={`${school.name} logo`} fill sizes="48px" className="object-contain p-1" />
+            </span>
+          ) : (
+            <span aria-label={`${school.name} logo not uploaded`} className="grid size-12 shrink-0 place-items-center rounded-xl border border-emerald-100 bg-emerald-50 text-xs font-black tracking-wide text-emerald-900">{initials}</span>
+          )}
           <div className="min-w-0 flex-1">
-            {school.location && <p className="flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="size-3.5 shrink-0 text-emerald-600" />{school.location}</p>}
-            <h3 className={cn("mt-2 text-lg font-extrabold leading-tight tracking-[-0.025em] text-[#0e2946]", compact && "mt-1 text-sm leading-snug")}><Link href={`/school/${school.slug}`} className="after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:rounded-[1.35rem] focus-visible:after:ring-4 focus-visible:after:ring-inset focus-visible:after:ring-emerald-500">{school.name}</Link></h3>
+            {location && <p className="flex items-center gap-1.5 text-xs font-semibold text-slate-500"><MapPin className="size-3.5 shrink-0 text-emerald-700" aria-hidden="true" /><span className="truncate">{location}</span></p>}
+            <Heading className="mt-1.5 line-clamp-2 text-base font-extrabold leading-snug tracking-[-0.025em] text-[#0e2946] sm:text-[1.05rem]">
+              <Link href={`/school/${school.slug}`} className="after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:rounded-[1.5rem] focus-visible:after:ring-4 focus-visible:after:ring-inset focus-visible:after:ring-emerald-600">{school.name}</Link>
+            </Heading>
           </div>
         </div>
-        <div className={cn("mt-3 flex flex-wrap gap-1.5", compact && "mt-2 gap-1")}>
-          {school.levels.slice(0, compact ? 2 : school.levels.length).map((level) => <span key={level} className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{level}</span>)}
-          {compact && school.levels.length > 2 && <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">+{school.levels.length - 2}</span>}
-          {school.type && <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{school.type}</span>}
-        </div>
-        <div className={cn("mt-4 flex items-end justify-between border-t border-slate-100 pt-4", compact && "mt-3 pt-3")}>
-          <div><p className="text-[11px] font-semibold text-slate-500">Tuition listed</p><p className={cn("text-base font-extrabold text-[#0e2946]", compact && "text-sm")}>{school.feeFrom > 0 ? formatNaira(school.feeFrom) : "Not provided"}</p></div>
-          <p className="text-xs font-semibold text-slate-500">{school.city}</p>
+
+        {(visibleLevels.length > 0 || school.type) && <div className="mt-4 flex min-h-7 flex-wrap gap-1.5">
+          {visibleLevels.map((level) => <span key={level} className="inline-flex min-h-7 items-center rounded-full border border-emerald-100 bg-[#f2f8f3] px-2.5 py-1 text-[11px] font-bold text-[#245b46]">{level}</span>)}
+          {remainingLevels > 0 && <span className="inline-flex min-h-7 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">+{remainingLevels}</span>}
+          {school.type && <span className="inline-flex min-h-7 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600">{school.type}</span>}
+        </div>}
+
+        <div className="mt-4 flex min-h-[52px] items-end justify-between gap-3 border-t border-slate-100 pt-3.5">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold text-slate-500">{school.feePublished ? "Tuition from" : "Fees"}</p>
+            <p className="mt-0.5 truncate text-sm font-extrabold text-[#0e2946]">{school.feePublished ? formatNaira(school.feeFrom) : "Not published"}</p>
+          </div>
+          {school.schoolType && <span className="max-w-[45%] truncate rounded-full bg-[#f2f5f8] px-2.5 py-1.5 text-[10px] font-bold text-slate-600">{school.schoolType}</span>}
         </div>
       </div>
     </article>

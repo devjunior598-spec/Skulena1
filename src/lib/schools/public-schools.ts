@@ -58,51 +58,152 @@ function genderLabel(value: string | null | undefined): School["gender"] {
   return value ? labels[value] ?? null : null;
 }
 
-export async function getPublicSchools(): Promise<School[]> {
+type PublicSchoolQueryOptions = { limit?: number; ids?: string[] };
+
+function groupBySchoolId<T extends { school_id: string }>(rows: T[] | null | undefined) {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows ?? []) {
+    const group = grouped.get(row.school_id);
+    if (group) group.push(row);
+    else grouped.set(row.school_id, [row]);
+  }
+  return grouped;
+}
+
+export async function getPublicSchools(options: PublicSchoolQueryOptions = {}): Promise<School[]> {
   const supabase = await createClient();
   if (!supabase) return [];
+  if (options.ids && options.ids.length === 0) return [];
+
   const pageSize = 250;
   const rows = [];
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase.from("public_school_profiles").select("*").order("published_at", { ascending: false }).range(from, from + pageSize - 1);
-    if (error) return [];
-    rows.push(...(data ?? []));
-    if (!data || data.length < pageSize) break;
+  let listQuery = supabase.from("public_school_profiles").select("id, slug, name, short_name, school_type, year_established, description, public_email, public_phone, website_url, structure, gender, admission_status, admission_description, published_at").order("published_at", { ascending: false });
+  if (options.ids) listQuery = listQuery.in("id", options.ids).limit(options.ids.length);
+  else if (options.limit) listQuery = listQuery.limit(Math.min(12, Math.max(1, Math.floor(options.limit))));
+  else listQuery = listQuery.range(0, pageSize - 1);
+
+  const { data: firstPage, error: firstPageError } = await listQuery;
+  if (firstPageError) return [];
+  rows.push(...(firstPage ?? []));
+  if (!options.ids && !options.limit && firstPage?.length === pageSize) {
+    for (let from = pageSize; ; from += pageSize) {
+      const { data, error } = await supabase.from("public_school_profiles").select("id, slug, name, short_name, school_type, year_established, description, public_email, public_phone, website_url, structure, gender, admission_status, admission_description, published_at").order("published_at", { ascending: false }).range(from, from + pageSize - 1);
+      if (error) return [];
+      rows.push(...(data ?? []));
+      if (!data || data.length < pageSize) break;
+    }
   }
   if (!rows.length) return [];
   const ids = rows.map((row) => row.id);
   const [{ data: branches }, { data: levels }, { data: curricula }, { data: facilities }, { data: fees }, { data: verification }, { data: media }] = await Promise.all([
-    supabase.from("school_branches").select("school_id, state, city, area, address_line, is_main").in("school_id", ids),
+    supabase.from("school_branches").select("school_id, state, city, area, is_main").in("school_id", ids),
     supabase.from("school_levels").select("school_id, levels(name, sort_order)").in("school_id", ids),
     supabase.from("school_curricula").select("school_id, custom_name, curricula(name)").in("school_id", ids),
     supabase.from("school_facilities").select("school_id, facilities(name)").in("school_id", ids),
     supabase.from("school_fees").select("school_id, amount, category").in("school_id", ids),
     supabase.from("public_verification_records").select("school_id, method").in("school_id", ids),
-    supabase.from("school_media").select("id, school_id, category, media_type, storage_path, caption, alt_text, is_cover, sort_order").in("school_id", ids).eq("moderation_status", "approved").order("sort_order").order("created_at", { ascending: false }),
+    supabase.from("school_media").select("id, school_id, category, media_type, storage_path, alt_text, is_cover, sort_order, created_at").in("school_id", ids).eq("media_type", "image").eq("moderation_status", "approved").order("sort_order").order("created_at", { ascending: false }),
   ]);
-  const paths = (media ?? []).map((item) => item.storage_path);
+
+  const branchesBySchool = groupBySchoolId(branches);
+  const levelsBySchool = groupBySchoolId(levels);
+  const curriculaBySchool = groupBySchoolId(curricula);
+  const facilitiesBySchool = groupBySchoolId(facilities);
+  const feesBySchool = groupBySchoolId(fees);
+  const verificationBySchool = groupBySchoolId(verification);
+  const mediaBySchool = groupBySchoolId(media);
+  const coverAndLogoBySchool = new Map<string, { cover: (typeof media extends (infer T)[] | null ? T : never) | null; logo: (typeof media extends (infer T)[] | null ? T : never) | null }>();
+  const signablePaths = new Set<string>();
+
+  for (const row of rows) {
+    const schoolMedia = mediaBySchool.get(row.id) ?? [];
+    const logo = schoolMedia.find((item) => item.category.toLowerCase() === SCHOOL_LOGO_CATEGORY.toLowerCase()) ?? null;
+    const galleryMedia = schoolMedia.filter((item) => item.category.toLowerCase() !== SCHOOL_LOGO_CATEGORY.toLowerCase());
+    const cover = galleryMedia.find((item) => item.is_cover) ?? galleryMedia[0] ?? null;
+    coverAndLogoBySchool.set(row.id, { cover, logo });
+    if (cover) signablePaths.add(cover.storage_path);
+    if (logo) signablePaths.add(logo.storage_path);
+  }
+
+  const paths = [...signablePaths];
   const signed = paths.length ? await supabase.storage.from("school-media").createSignedUrls(paths, 3600) : { data: [] };
   const urls = new Map((signed.data ?? []).map((item) => [item.path, item.signedUrl]));
   return rows.map((row) => {
-    const branch = (branches ?? []).find((item) => item.school_id === row.id && item.is_main) ?? (branches ?? []).find((item) => item.school_id === row.id);
-    const amounts = (fees ?? []).filter((item) => item.school_id === row.id && item.category === "tuition").map((item) => Number(item.amount));
-    const schoolMedia = (media ?? []).filter((item) => item.school_id === row.id);
-    const logoMedia = schoolMedia.find((item) => item.category.toLowerCase() === SCHOOL_LOGO_CATEGORY.toLowerCase() && item.media_type === "image");
-    const galleryMedia = schoolMedia.filter((item) => item.category.toLowerCase() !== SCHOOL_LOGO_CATEGORY.toLowerCase());
-    const profileMedia = galleryMedia.flatMap((item) => {
-      const src = urls.get(item.storage_path);
-      return src ? [{ id: item.id, src, category: item.category, caption: item.caption || "", alt: item.alt_text || `${row.name} ${item.category.toLowerCase()}`, mediaType: item.media_type }] : [];
-    });
-    const cover = galleryMedia.find((item) => item.media_type === "image" && item.is_cover) ?? galleryMedia.find((item) => item.media_type === "image");
-    const methods = (verification ?? []).filter((item) => item.school_id === row.id).map((item) => item.method);
+    const branchRows = branchesBySchool.get(row.id) ?? [];
+    const branch = branchRows.find((item) => item.is_main) ?? branchRows[0];
+    const tuitionAmounts = (feesBySchool.get(row.id) ?? []).filter((item) => item.category === "tuition").map((item) => Number(item.amount)).filter((amount) => Number.isFinite(amount) && amount >= 0);
+    const methods = (verificationBySchool.get(row.id) ?? []).map((item) => item.method);
     const verificationLevel: VerificationLevel = methods.includes("physically_verified") ? "physically-verified" : methods.includes("document_verified") ? "document-verified" : "school-provided";
-    const schoolLevels = (levels ?? []).filter((item) => item.school_id === row.id).sort((a, b) => {
+    const schoolLevels = [...(levelsBySchool.get(row.id) ?? [])].sort((a, b) => {
       const levelA = Array.isArray(a.levels) ? a.levels[0] : a.levels;
       const levelB = Array.isArray(b.levels) ? b.levels[0] : b.levels;
       return (levelA?.sort_order ?? Number.MAX_SAFE_INTEGER) - (levelB?.sort_order ?? Number.MAX_SAFE_INTEGER);
     });
-    return { databaseId: row.id, slug: row.slug, name: row.name, shortName: row.short_name || row.name, location: addressParts(branch?.area, branch?.city, branch?.state).join(", "), city: branch?.city ? displayAddressPart(branch.city) : "", distance: "", levels: schoolLevels.map((item) => relationName(item.levels)).filter((value): value is string => Boolean(value)), curriculum: (curricula ?? []).filter((item) => item.school_id === row.id).map((item) => item.custom_name || relationName(item.curricula)).filter((value): value is string => Boolean(value)), type: structureLabel(row.structure), schoolType: schoolTypeLabel(row.school_type), gender: genderLabel(row.gender), yearEstablished: row.year_established, admissionStatus: row.admission_status, admissionDescription: row.admission_description || undefined, feeFrom: amounts.length ? Math.min(...amounts) : 0, feeTo: amounts.length ? Math.max(...amounts) : 0, rating: 0, reviewCount: 0, classSize: 0, verification: verificationLevel, image: cover ? urls.get(cover.storage_path) ?? null : null, logo: logoMedia ? urls.get(logoMedia.storage_path) ?? null : null, images: profileMedia.filter((item) => item.mediaType === "image").map((item) => item.src), media: profileMedia, description: row.description || "", facilities: (facilities ?? []).filter((item) => item.school_id === row.id).map((item) => relationName(item.facilities)).filter((value): value is string => Boolean(value)), tags: [], } satisfies School;
+    const media = coverAndLogoBySchool.get(row.id);
+    const coverUrl = media?.cover ? urls.get(media.cover.storage_path) ?? null : null;
+    const logoUrl = media?.logo ? urls.get(media.logo.storage_path) ?? null : null;
+    return {
+      databaseId: row.id,
+      slug: row.slug,
+      name: row.name,
+      shortName: row.short_name || row.name,
+      location: addressParts(branch?.area, branch?.city, branch?.state).join(", "),
+      city: branch?.city ? displayAddressPart(branch.city) : "",
+      distance: "",
+      levels: schoolLevels.map((item) => relationName(item.levels)).filter((value): value is string => Boolean(value)),
+      curriculum: (curriculaBySchool.get(row.id) ?? []).map((item) => item.custom_name || relationName(item.curricula)).filter((value): value is string => Boolean(value)),
+      type: structureLabel(row.structure),
+      schoolType: schoolTypeLabel(row.school_type),
+      gender: genderLabel(row.gender),
+      yearEstablished: row.year_established,
+      admissionStatus: row.admission_status,
+      admissionDescription: row.admission_description || undefined,
+      feeFrom: tuitionAmounts.length ? Math.min(...tuitionAmounts) : 0,
+      feeTo: tuitionAmounts.length ? Math.max(...tuitionAmounts) : 0,
+      feePublished: tuitionAmounts.length > 0,
+      rating: 0,
+      reviewCount: 0,
+      classSize: 0,
+      verification: verificationLevel,
+      image: coverUrl,
+      imageAlt: media?.cover?.alt_text?.trim() || `${row.name} campus photo`,
+      hasApprovedCover: Boolean(media?.cover),
+      logo: logoUrl,
+      images: [],
+      media: [],
+      description: row.description || "",
+      facilities: (facilitiesBySchool.get(row.id) ?? []).map((item) => relationName(item.facilities)).filter((value): value is string => Boolean(value)),
+      tags: [],
+    } satisfies School;
   });
+}
+
+export async function getParentSavedSchoolIds(parentId: string, schoolIds: string[]) {
+  if (schoolIds.length === 0) return [];
+  const supabase = await createClient();
+  if (!supabase) return [];
+  const { data, error } = await supabase.from("saved_schools").select("school_id").eq("parent_id", parentId).in("school_id", schoolIds);
+  if (error) return [];
+  return (data ?? []).map((row) => row.school_id);
+}
+
+export async function getPublicSchoolPayStatus() {
+  const unavailable = { publicVisible: false, schoolEnrollmentEnabled: false, parentApplicationsEnabled: false, financialExecutionEnabled: false, available: false };
+  const supabase = await createClient();
+  if (!supabase) return unavailable;
+  const { data, error } = await supabase.from("platform_features").select("feature_key, enabled").in("feature_key", [
+    "schoolpay_public_visible",
+    "schoolpay_school_enrollment_enabled",
+    "schoolpay_parent_applications_enabled",
+    "schoolpay_financial_execution_enabled",
+  ]);
+  if (error || !data) return unavailable;
+  const flags = new Map(data.map((row) => [row.feature_key, row.enabled === true]));
+  const publicVisible = flags.get("schoolpay_public_visible") === true;
+  const schoolEnrollmentEnabled = flags.get("schoolpay_school_enrollment_enabled") === true;
+  const parentApplicationsEnabled = flags.get("schoolpay_parent_applications_enabled") === true;
+  const financialExecutionEnabled = flags.get("schoolpay_financial_execution_enabled") === true;
+  return { publicVisible, schoolEnrollmentEnabled, parentApplicationsEnabled, financialExecutionEnabled, available: publicVisible && schoolEnrollmentEnabled && parentApplicationsEnabled && financialExecutionEnabled };
 }
 
 export const getPublicSchoolBySlug = cache(async (slug: string) => {
