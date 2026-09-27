@@ -90,7 +90,7 @@ export function filterSchools(schools: School[], filters: SchoolFilters): School
     if (filters.area && !normalize(school.location).includes(normalize(filters.area))) return false;
     if (filters.state && !school.location.split(",").some((part) => normalize(part) === normalize(filters.state))) return false;
     if (!anyMatch(filters.level, school.levels) || !anyMatch(filters.curriculum, school.curriculum)) return false;
-    if (filters.type.length && !filters.type.some((type) => normalize(school.type).includes(type))) return false;
+    if (filters.type.length && !filters.type.some((type) => normalize(school.type ?? "").includes(type))) return false;
     if (filters.verification.length && !filters.verification.includes(school.verification)) return false;
     if (filters.facility.length && !filters.facility.every((facility) => school.facilities.some((item) => normalize(item) === facility))) return false;
     if (filters.minFee && school.feeTo < Number(filters.minFee)) return false;

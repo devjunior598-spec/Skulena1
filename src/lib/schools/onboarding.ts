@@ -21,7 +21,7 @@ export async function getOnboardingDraft() {
     supabase.from("school_levels").select("levels(code)").eq("school_id", String(school.id)),
     supabase.from("school_curricula").select("curricula(code)").eq("school_id", String(school.id)),
     supabase.from("school_facilities").select("facilities(code)").eq("school_id", String(school.id)),
-    supabase.from("school_fees").select("amount, category, term, academic_year").eq("school_id", String(school.id)).limit(1).maybeSingle(),
+    supabase.from("school_fees").select("amount, category, term, academic_year").eq("school_id", String(school.id)).order("created_at", { ascending: true }).limit(1).maybeSingle(),
     supabase.from("school_admission_requirements").select("requirement").eq("school_id", String(school.id)).order("sort_order"),
     supabase.rpc("school_profile_completion", { target_school_id: String(school.id) }),
     supabase.from("school_media").select("id", { count: "exact", head: true }).eq("school_id", String(school.id)).neq("category", SCHOOL_LOGO_CATEGORY),

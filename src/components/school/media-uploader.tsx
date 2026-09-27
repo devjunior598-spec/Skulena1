@@ -7,7 +7,8 @@ import { ImagePlus, LoaderCircle, Plus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { registerMediaRecord } from "@/app/school/(portal)/media/actions";
-import { mediaCategories } from "@/types/domain";
+import { deleteSchoolMedia, moveSchoolMedia, setSchoolMediaCover, updateSchoolMedia } from "@/app/school/(portal)/workspace-actions";
+import { mediaCategories, SCHOOL_LOGO_CATEGORY } from "@/types/domain";
 
 const mimeTypes = ["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"] as const;
 const extensionByMime = {
@@ -35,6 +36,8 @@ type UploadedMedia = {
   caption: string;
   src: string;
   moderationStatus: string;
+  isCover: boolean;
+  sortOrder: number;
 };
 
 type UploadedMediaRecord = {
@@ -44,28 +47,32 @@ type UploadedMediaRecord = {
   storage_path: string;
   caption: string | null;
   moderation_status: string;
+  is_cover: boolean;
+  sort_order: number;
 };
 
-function emptyEntry(id: number): MediaEntry {
-  return { id, category: "Campus", customCategory: "", caption: "", file: null, previewUrl: "" };
+function emptyEntry(id: number, category = "Campus"): MediaEntry {
+  return { id, category, customCategory: "", caption: "", file: null, previewUrl: "" };
 }
 
 function mediaStatus(status: string) {
-  if (status === "pending") return "Pending review";
-  if (status === "approved") return "Approved";
-  if (status === "rejected") return "Needs an update";
+  if (status === "pending") return "Under review";
+  if (status === "approved") return "Published";
+  if (status === "rejected") return "Needs changes";
   return status;
 }
 
-export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: string; onPendingCountChange?: (count: number) => void }) {
+export function MediaUploader({ schoolId, initialCategory = "Campus", onPendingCountChange }: { schoolId: string; initialCategory?: string; onPendingCountChange?: (count: number) => void }) {
   const router = useRouter();
+  const defaultCategory = mediaCategories.includes(initialCategory as typeof mediaCategories[number]) ? initialCategory : "Campus";
   const nextEntryId = useRef(1);
   const previewUrls = useRef(new Map<number, string>());
-  const [entries, setEntries] = useState<MediaEntry[]>([emptyEntry(0)]);
+  const [entries, setEntries] = useState<MediaEntry[]>([emptyEntry(0, defaultCategory)]);
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(true);
   const [galleryError, setGalleryError] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [progress, setProgress] = useState("");
   const [message, setMessage] = useState("");
 
@@ -74,7 +81,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
       const supabase = createClient();
       const { data, error } = await supabase
         .from("school_media")
-        .select("id, category, media_type, storage_path, caption, moderation_status")
+        .select("id, category, media_type, storage_path, caption, moderation_status, is_cover, sort_order")
         .eq("school_id", schoolId)
         .order("created_at", { ascending: false })
         .limit(48);
@@ -88,7 +95,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
       return records.flatMap((item: UploadedMediaRecord) => {
         const src = urlByPath.get(item.storage_path);
         if (!src) return [];
-        return [{ id: item.id, category: item.category, mediaType: item.media_type, caption: item.caption || "", src, moderationStatus: String(item.moderation_status) }];
+        return [{ id: item.id, category: item.category, mediaType: item.media_type, caption: item.caption || "", src, moderationStatus: String(item.moderation_status), isCover: item.is_cover, sortOrder: item.sort_order }];
       });
     } catch {
       return null;
@@ -123,6 +130,30 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
     updateEntry(id, { file, previewUrl });
   }
 
+  function addFiles(files: FileList | File[]) {
+    const incoming = Array.from(files);
+    const available = maxFilesPerUpload - entries.filter((entry) => entry.file).length;
+    const selected = incoming.slice(0, Math.max(0, available));
+    const next = [...entries];
+    for (const file of selected) {
+      let index = next.findIndex((entry) => !entry.file);
+      if (index < 0 && next.length < maxFilesPerUpload) {
+        next.push(emptyEntry(nextEntryId.current++, defaultCategory));
+        index = next.length - 1;
+      }
+      if (index < 0) break;
+      const entry = next[index];
+      const previousUrl = previewUrls.current.get(entry.id);
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      const previewUrl = URL.createObjectURL(file);
+      previewUrls.current.set(entry.id, previewUrl);
+      next[index] = { ...entry, file, previewUrl };
+    }
+    setEntries(next);
+    onPendingCountChange?.(next.filter((entry) => entry.file).length);
+    setMessage(incoming.length > selected.length ? `You can add up to ${maxFilesPerUpload} files at once. The extra files were not added.` : "");
+  }
+
   function addEntry() {
     if (entries.length >= maxFilesPerUpload) return;
     setEntries((current) => [...current, emptyEntry(nextEntryId.current++)]);
@@ -130,7 +161,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
   }
 
   function removeEntry(id: number) {
-    const next = entries.length === 1 ? [emptyEntry(nextEntryId.current++)] : entries.filter((entry) => entry.id !== id);
+    const next = entries.length === 1 ? [emptyEntry(nextEntryId.current++, defaultCategory)] : entries.filter((entry) => entry.id !== id);
     const previousUrl = previewUrls.current.get(id);
     if (previousUrl) URL.revokeObjectURL(previousUrl);
     previewUrls.current.delete(id);
@@ -148,6 +179,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
       if (category.length < 2 || category.length > 80) { setMessage(`Add a category name for image ${index + 1} (2–80 characters).`); return; }
       const file = entry.file!;
       if (!mimeTypes.includes(file.type as typeof mimeTypes[number])) { setMessage(`${file.name}: use JPEG, PNG or WebP images, or MP4/WebM videos.`); return; }
+      if (category === SCHOOL_LOGO_CATEGORY && (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024)) { setMessage("A school logo must be an image smaller than 5 MB."); return; }
       const limit = file.type.startsWith("image/") ? 10485760 : 104857600;
       if (file.size > limit) { setMessage(`${file.name} is too large. Images must be 10 MB or smaller; videos 100 MB or smaller.`); return; }
     }
@@ -189,7 +221,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
       const saved = entries.slice(0, completed);
       const immediatePreviews: UploadedMedia[] = saved.flatMap((entry) => {
         if (!entry.file || !entry.previewUrl) return [];
-        return [{ id: `local-${entry.id}`, category: entry.category === "Other" ? entry.customCategory.trim() : entry.category, mediaType: entry.file.type.startsWith("video/") ? "video" : "image", caption: entry.caption.trim(), src: entry.previewUrl, moderationStatus: "pending" }];
+        return [{ id: `local-${entry.id}`, category: entry.category === "Other" ? entry.customCategory.trim() : entry.category, mediaType: entry.file.type.startsWith("video/") ? "video" : "image", caption: entry.caption.trim(), src: entry.previewUrl, moderationStatus: "pending", isCover: false, sortOrder: 0 }];
       });
       setUploadedMedia((current) => [...immediatePreviews, ...current]);
       setGalleryLoading(false);
@@ -197,7 +229,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
       const persistedMedia = await loadUploadedMedia();
       if (persistedMedia) setUploadedMedia(persistedMedia);
       const remaining = entries.slice(completed);
-      setEntries(remaining.length ? remaining : [emptyEntry(nextEntryId.current++)]);
+      setEntries(remaining.length ? remaining : [emptyEntry(nextEntryId.current++, defaultCategory)]);
       onPendingCountChange?.(remaining.filter((entry) => entry.file).length);
       await loadUploadedMedia();
       router.refresh();
@@ -212,7 +244,7 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+    <div id="upload-media" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-slate-50 p-5">
       <div className="flex items-center gap-3">
         <ImagePlus className="size-5 text-emerald-700" aria-hidden="true" />
         <div>
@@ -220,6 +252,11 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
           <p className="mt-1 text-sm text-slate-600">Choose a category and file for each entry. Preview everything here before continuing.</p>
         </div>
       </div>
+
+      <label onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); addFiles(event.dataTransfer.files); }} className={`mt-5 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-4 text-center transition focus-within:outline-none focus-within:ring-2 focus-within:ring-emerald-600 ${dragActive ? "border-emerald-600 bg-emerald-50" : "border-slate-300 bg-white hover:border-emerald-400 hover:bg-emerald-50/40"}`}>
+        <span className="text-sm font-extrabold text-[#0e2946]">Drop photos or videos here</span><span className="mt-1 text-xs text-slate-500">or browse files from your device</span>
+        <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" className="sr-only" aria-label="Browse photos and videos to upload" onChange={(event) => { if (event.currentTarget.files) addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
+      </label>
 
       <div className="mt-5 space-y-4">
         {entries.map((entry, index) => <fieldset key={entry.id} disabled={busy} className="rounded-xl border border-slate-200 bg-white p-4">
@@ -271,7 +308,16 @@ export function MediaUploader({ schoolId, onPendingCountChange }: { schoolId: st
             <div className="p-3">
               <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-extrabold text-[#0e2946]">{item.category}</h4><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.moderationStatus === "approved" ? "bg-emerald-50 text-emerald-800" : item.moderationStatus === "rejected" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900"}`}>{mediaStatus(item.moderationStatus)}</span></div>
               {item.caption && <p className="mt-1 text-sm text-slate-600">{item.caption}</p>}
-              <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500">{item.mediaType === "video" && <Video className="size-3.5" aria-hidden="true" />}{item.mediaType}</p>
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500">{item.mediaType === "video" && <Video className="size-3.5" aria-hidden="true" />}{item.mediaType === "video" ? "Video" : "Photo"}{item.isCover && <span className="ml-auto rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-800">Cover photo</span>}</p>
+              {!item.id.startsWith("local-") && <div className="mt-3 border-t border-slate-100 pt-3">
+                <details><summary className="min-h-8 cursor-pointer list-none text-xs font-extrabold text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 [&::-webkit-details-marker]:hidden">Edit photo details</summary><form action={updateSchoolMedia} className="mt-2 space-y-2 rounded-lg bg-slate-50 p-3"><input type="hidden" name="schoolId" value={schoolId} /><input type="hidden" name="mediaId" value={item.id} /><label className="block text-[11px] font-bold text-slate-700">Category<input name="category" defaultValue={item.category} maxLength={80} required className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-xs" /></label><label className="block text-[11px] font-bold text-slate-700">Caption<input name="caption" defaultValue={item.caption} maxLength={300} className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2.5 text-xs" /></label><Button size="sm" className="h-9">Save details</Button></form></details>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <form action={moveSchoolMedia}><input type="hidden" name="schoolId" value={schoolId} /><input type="hidden" name="mediaId" value={item.id} /><input type="hidden" name="direction" value="up" /><button aria-label={`Move ${item.category} earlier`} className="min-h-8 rounded-lg border border-slate-200 px-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50">Move earlier</button></form>
+                  <form action={moveSchoolMedia}><input type="hidden" name="schoolId" value={schoolId} /><input type="hidden" name="mediaId" value={item.id} /><input type="hidden" name="direction" value="down" /><button aria-label={`Move ${item.category} later`} className="min-h-8 rounded-lg border border-slate-200 px-2 text-[11px] font-bold text-slate-600 hover:bg-slate-50">Move later</button></form>
+                  {item.mediaType === "image" && item.moderationStatus === "approved" && <form action={setSchoolMediaCover}><input type="hidden" name="schoolId" value={schoolId} /><input type="hidden" name="mediaId" value={item.id} /><button className="min-h-8 rounded-lg border border-emerald-200 px-2 text-[11px] font-extrabold text-emerald-800 hover:bg-emerald-50">{item.isCover ? "Current cover" : "Set as cover"}</button></form>}
+                  <details className="relative"><summary className="flex min-h-8 cursor-pointer list-none items-center rounded-lg px-2 text-[11px] font-bold text-rose-700 hover:bg-rose-50 [&::-webkit-details-marker]:hidden">Remove</summary><form action={deleteSchoolMedia} className="absolute right-0 z-10 mt-1 w-48 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"><input type="hidden" name="schoolId" value={schoolId} /><input type="hidden" name="mediaId" value={item.id} /><p className="text-xs font-semibold text-slate-700">Remove this item from your profile?</p><Button size="sm" variant="outline" className="mt-2 w-full border-rose-200 text-rose-700">Yes, remove</Button></form></details>
+                </div>
+              </div>}
             </div>
           </article>)}
         </div> : galleryLoading ? <p role="status" className="mt-3 text-sm text-slate-500">Loading your uploads…</p> : galleryError ? <p role="status" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">Your uploads are saved, but the review gallery could not be loaded. Refresh this page to try again.</p> : <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">Nothing uploaded yet. Your images and videos will appear here as soon as they’re saved.</div>}

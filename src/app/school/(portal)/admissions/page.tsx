@@ -1,2 +1,43 @@
-import { BookOpenCheck } from "lucide-react"; import { SchoolSectionPlaceholder } from "@/components/school/section-placeholder";
-export default function Page() { return <SchoolSectionPlaceholder icon={BookOpenCheck} title="Admissions" description="Publish availability and requirements without enabling applications yet." empty="Add an admission status and description during onboarding." />; }
+import { ArrowRight, BookOpenCheck, CalendarDays, Check, CircleDollarSign, ClipboardList, FileText, Pencil, Plus, Users } from "lucide-react";
+import { PageHeading } from "@/components/portal/page-heading";
+import { Button } from "@/components/ui/button";
+import { Detail, SectionTitle, StatusPill, WorkspaceCard, WorkspaceFeedback, type WorkspaceSearchParams } from "@/components/school/workspace-ui";
+import { getManagedSchool } from "@/lib/schools/managed-school";
+import { getSchoolWorkspaceData } from "@/lib/schools/workspace";
+import { saveAdmissionDetails } from "@/app/school/(portal)/workspace-actions";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Admissions" };
+type PageProps = { searchParams?: WorkspaceSearchParams };
+
+export default async function AdmissionsPage({ searchParams }: PageProps) {
+  const { school, supabase } = await getManagedSchool();
+  if (!school) return <PageHeading eyebrow="Your school" title="Admissions" description="Set up your school profile first to share admissions information." />;
+  const data = await getSchoolWorkspaceData(supabase, school.id);
+  const configured = Boolean(school.admission_description || data.requirements.length || school.admission_status !== "closed");
+  const requirementsText = data.requirements.map((item) => item.requirement).join("\n");
+  const accepting = data.classes.filter((item) => item.accepting_applications).length;
+  return <>
+    <WorkspaceFeedback searchParams={searchParams} />
+    <PageHeading eyebrow="Families & enrolment" title="Admissions" description="Manage the information families need before they apply to your school." action={<a href="#admission-details" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-extrabold text-white hover:bg-emerald-800"><Pencil className="size-4" />Edit admission details</a>} />
+    {data.error && <p role="alert" className="mt-5 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-950">{data.error}</p>}
+    <WorkspaceCard className="mt-6 bg-[linear-gradient(110deg,#f1f8f4,#f5f8fb)]"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-start gap-3"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-white text-emerald-800 shadow-sm"><BookOpenCheck className="size-5" /></span><div><p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Admissions are</p><div className="mt-1.5 flex items-center gap-2"><StatusPill value={String(school.admission_status)} /><span className="text-xs text-slate-500">Change when your intake status changes.</span></div></div></div><a href="#admission-details" className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-extrabold text-slate-700 hover:border-emerald-300 hover:text-emerald-800">Change status <ArrowRight className="size-4" /></a></div></WorkspaceCard>
+
+    {!configured && <div className="mt-5 flex flex-col items-start gap-3 rounded-2xl border border-emerald-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"><div className="flex items-start gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><Users className="size-5" /></span><div><h2 className="text-sm font-extrabold text-[#0e2946]">Start accepting enquiries from families</h2><p className="mt-1 max-w-xl text-xs leading-5 text-slate-600">Add your admission information so parents know what to expect and how to contact your school.</p></div></div><a href="#admission-details" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-700 px-3.5 text-xs font-extrabold text-white hover:bg-emerald-800"><Plus className="size-4" />Set up admissions</a></div>}
+
+    <div className="mt-5 grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+      <WorkspaceCard><SectionTitle title="Admission overview" description="This is the information families can use to understand your current intake." action={<a href="#admission-details" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-extrabold text-emerald-800 hover:bg-emerald-50"><Pencil className="size-3.5" />Edit</a>} />
+        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-600">{String(school.admission_description ?? "") || <span className="text-slate-400">Add a short note about your admissions process.</span>}</p>
+        <dl className="mt-4 grid gap-2 sm:grid-cols-2"><Detail label="Current status" value={String(school.admission_status).replaceAll("_", " ")} icon={BookOpenCheck} /><Detail label="Classes accepting applications" value={accepting ? `${accepting} classes` : "Not set up yet"} icon={Users} /></dl>
+      </WorkspaceCard>
+      <WorkspaceCard><SectionTitle title="What families need" description="Requirements and useful details for an application." />
+        {data.requirements.length ? <ol className="mt-4 space-y-2">{data.requirements.map((item, index) => <li key={item.id} className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3"><span className="grid size-5 shrink-0 place-items-center rounded-full bg-white text-[10px] font-extrabold text-emerald-800">{index + 1}</span><span className="text-sm leading-5 text-slate-700">{item.requirement}</span></li>)}</ol> : <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-500">No admission requirements have been added yet.</p>}
+        <div className="mt-4"><a href="#admission-details" className="text-xs font-extrabold text-emerald-800 hover:underline">Edit requirements</a></div>
+      </WorkspaceCard>
+    </div>
+
+    <section className="mt-5"><div className="mb-3"><h2 className="text-base font-extrabold text-[#0e2946]">Intake details</h2><p className="mt-1 text-xs text-slate-500">Information already available in your school workspace.</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><WorkspaceCard className="p-4"><CalendarDays className="size-4 text-emerald-700" /><p className="mt-3 text-xs font-bold text-slate-500">Admission dates</p><p className="mt-1 text-sm font-bold text-slate-700">Not collected yet</p></WorkspaceCard><WorkspaceCard className="p-4"><CircleDollarSign className="size-4 text-emerald-700" /><p className="mt-3 text-xs font-bold text-slate-500">Application fee</p><p className="mt-1 text-sm font-bold text-slate-700">Not collected yet</p></WorkspaceCard><WorkspaceCard className="p-4"><ClipboardList className="size-4 text-emerald-700" /><p className="mt-3 text-xs font-bold text-slate-500">Entrance assessment</p><p className="mt-1 text-sm font-bold text-slate-700">Not collected yet</p></WorkspaceCard><WorkspaceCard className="p-4"><FileText className="size-4 text-emerald-700" /><p className="mt-3 text-xs font-bold text-slate-500">Parent application form</p><p className="mt-1 text-sm font-bold text-slate-700">Not available yet</p></WorkspaceCard></div></section>
+
+    <WorkspaceCard id="admission-details" className="mt-5 scroll-mt-24"><SectionTitle title="Edit admission details" description="Keep your status and requirements current for families." /><form action={saveAdmissionDetails} className="mt-4 grid gap-4 lg:grid-cols-2"><input type="hidden" name="schoolId" value={school.id} /><label className="block text-xs font-bold text-slate-700">Admissions status<select name="admissionStatus" defaultValue={String(school.admission_status)} className="mt-1.5 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm"><option value="open">Open</option><option value="opening_soon">Opening soon</option><option value="closed">Closed</option></select></label><label className="block text-xs font-bold text-slate-700 lg:row-span-2">Instructions for parents<textarea name="admissionDescription" defaultValue={String(school.admission_description ?? "")} rows={5} maxLength={3000} placeholder="Tell families how to learn more or begin an application." className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15" /></label><label className="block text-xs font-bold text-slate-700">Requirements <span className="font-medium text-slate-400">(one per line)</span><textarea name="requirements" defaultValue={requirementsText} rows={5} maxLength={4000} placeholder="e.g. Previous school report" className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white p-3 text-sm outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15" /></label><div className="lg:col-span-2"><Button><Check className="size-4" />Save admission details</Button></div></form></WorkspaceCard>
+  </>;
+}

@@ -29,7 +29,7 @@ export const onboardingSchema = z.object({
   feeAmount: z.union([z.literal(""), z.coerce.number().nonnegative().max(100000000)]),
   feeCategory: z.enum(["tuition", "registration", "books", "uniform", "transport", "boarding", "other"]),
   feeTerm: z.string().trim().max(40),
-  academicYear: z.string().trim().refine((value) => value === "" || /^\d{4}\/\d{4}$/.test(value), "Use YYYY/YYYY"),
+  academicYear: z.string().trim().refine((value) => value === "" || (/^\d{4}\/\d{4}$/.test(value) && Number(value.slice(5)) === Number(value.slice(0, 4)) + 1), "Use consecutive school years, such as 2026/2027"),
   admissionStatus: z.enum(["open", "closed", "opening_soon"]),
   admissionDescription: z.string().trim().max(3000),
   requirements: z.string().trim().max(4000),

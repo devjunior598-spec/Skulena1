@@ -1,11 +1,16 @@
-import { BadgeCheck, BookOpenCheck, Building2, CircleDollarSign, Images, LayoutDashboard, MapPinned, Settings, Users } from "lucide-react";
-import { PortalShell } from "@/components/portal/portal-shell";
-import { requireAccount } from "@/lib/auth";
-const items = [
-  { href: "/school/dashboard", label: "Dashboard", icon: LayoutDashboard }, { href: "/school/profile", label: "School profile", icon: Building2 },
-  { href: "/school/facilities", label: "Facilities", icon: MapPinned }, { href: "/school/fees", label: "Fees", icon: CircleDollarSign },
-  { href: "/school/media", label: "Media", icon: Images }, { href: "/school/admissions", label: "Admissions", icon: BookOpenCheck },
-  { href: "/school/verification", label: "Verification", icon: BadgeCheck }, { href: "/school/team", label: "Team", icon: Users },
-  { href: "/school/settings", label: "Settings", icon: Settings },
-];
-export default async function SchoolPortalLayout({ children }: { children: React.ReactNode }) { const { profile } = await requireAccount(["school_owner", "school_staff"]); return <PortalShell title="School workspace" name={profile.full_name} items={items}>{children}</PortalShell>; }
+import { SchoolWorkspaceShell } from "@/components/school/workspace-shell";
+import { getManagedSchool } from "@/lib/schools/managed-school";
+import { SCHOOL_LOGO_CATEGORY } from "@/types/domain";
+
+export default async function SchoolPortalLayout({ children }: { children: React.ReactNode }) {
+  const { profile, user, supabase, school, schoolOptions } = await getManagedSchool();
+  const logoPromise = school ? (async () => {
+    const { data } = await supabase.from("school_media").select("storage_path").eq("school_id", school.id).eq("category", SCHOOL_LOGO_CATEGORY).eq("media_type", "image").order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (!data?.storage_path) return null;
+    const { data: signed } = await supabase.storage.from("school-media").createSignedUrl(data.storage_path, 1800);
+    return signed?.signedUrl ?? null;
+  })() : Promise.resolve(null);
+  const notificationPromise = supabase.from("notifications").select("id", { count: "exact", head: true }).eq("recipient_id", user.id).is("read_at", null).then(({ count }) => count ?? 0);
+  const [schoolLogo, notifications] = await Promise.all([logoPromise, notificationPromise]);
+  return <SchoolWorkspaceShell schoolName={school?.name ?? null} schoolStatus={school?.status ?? null} schoolLogo={schoolLogo} currentSchoolId={school?.id} schoolOptions={schoolOptions} fullName={profile.full_name} avatarUrl={profile.avatar_url} email={user.email ?? undefined} notifications={notifications}>{children}</SchoolWorkspaceShell>;
+}

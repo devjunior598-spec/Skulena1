@@ -1,0 +1,8 @@
+# Keep local credentials and Supabase CLI linkage data out of deployment uploads.
+.env*
+/supabase/.temp/
+
+# Exclude macOS metadata files and local TypeScript build cache.
+**/._*
+**/.DS_Store
+/tsconfig.tsbuildinfo

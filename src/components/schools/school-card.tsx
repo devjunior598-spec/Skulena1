@@ -3,7 +3,6 @@ import Link from "next/link";
 import { GraduationCap, MapPin } from "lucide-react";
 import type { School } from "@/data/schools";
 import { formatNaira } from "@/data/schools";
-import { VerificationBadge } from "./verification-badge";
 import { cn } from "@/lib/utils";
 import { SaveSchoolButton } from "./school-actions";
 
@@ -12,23 +11,22 @@ export function SchoolCard({ school, horizontal = false }: { school: School; hor
     <article className={cn("group relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white transition duration-300 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_18px_44px_-28px_rgba(15,41,70,0.42)]", horizontal && "sm:grid sm:grid-cols-[220px_1fr]")}>
       <div className={cn("relative aspect-[4/3] overflow-hidden bg-slate-100", horizontal && "sm:aspect-auto sm:min-h-57")}>
         {school.image ? <Image src={school.image} alt={`${school.name} school media`} fill sizes={horizontal ? "(max-width: 640px) 100vw, 220px" : "(max-width: 768px) 100vw, 33vw"} className="object-cover transition duration-500 group-hover:scale-[1.03]" /> : <div aria-label="School photo not available" className="absolute inset-0 grid place-items-center bg-gradient-to-br from-emerald-50 via-slate-50 to-sky-100"><GraduationCap className="size-14 text-emerald-800/70" aria-hidden="true" /></div>}
-        <div className="absolute left-3 top-3"><VerificationBadge level={school.verification} short /></div>
         <SaveSchoolButton slug={school.slug} name={school.name} iconOnly className="absolute right-3 top-3 z-20 size-10 rounded-full border-0 bg-white/95 shadow-sm" />
       </div>
       <div className="p-4.5 sm:p-5">
         <div className="flex items-start gap-3">
           {school.logo ? <span className="relative size-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white"><Image src={school.logo} alt="" aria-hidden="true" fill sizes="48px" className="object-contain p-1.5" /></span> : <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-800"><GraduationCap className="size-6" aria-hidden="true" /></span>}
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="size-3.5 shrink-0 text-emerald-600" />{school.location}</p>
+            {school.location && <p className="flex items-center gap-1 text-xs font-medium text-slate-500"><MapPin className="size-3.5 shrink-0 text-emerald-600" />{school.location}</p>}
             <h3 className="mt-2 text-lg font-extrabold leading-tight tracking-[-0.025em] text-[#0e2946]"><Link href={`/school/${school.slug}`} className="after:absolute after:inset-0 after:z-10 focus-visible:outline-none focus-visible:after:rounded-[1.35rem] focus-visible:after:ring-4 focus-visible:after:ring-inset focus-visible:after:ring-emerald-500">{school.name}</Link></h3>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {school.levels.map((level) => <span key={level} className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{level}</span>)}
-          <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{school.type}</span>
+          {school.type && <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">{school.type}</span>}
         </div>
         <div className="mt-4 flex items-end justify-between border-t border-slate-100 pt-4">
-          <div><p className="text-[11px] font-semibold text-slate-500">Fees from / term</p><p className="text-base font-extrabold text-[#0e2946]">{school.feeFrom > 0 ? formatNaira(school.feeFrom) : "Ask school"}</p></div>
+          <div><p className="text-[11px] font-semibold text-slate-500">Tuition listed</p><p className="text-base font-extrabold text-[#0e2946]">{school.feeFrom > 0 ? formatNaira(school.feeFrom) : "Not provided"}</p></div>
           <p className="text-xs font-semibold text-slate-500">{school.city}</p>
         </div>
       </div>

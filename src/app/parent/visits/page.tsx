@@ -1,0 +1,22 @@
+import Link from "next/link";
+import { CalendarDays } from "lucide-react";
+import { EmptyState } from "@/components/portal/empty-state";
+import { PageHeading } from "@/components/portal/page-heading";
+import { createClient } from "@/lib/supabase/server";
+import { requireAccount } from "@/lib/auth";
+
+export default async function ParentVisitsPage() {
+  const { user } = await requireAccount(["parent"]);
+  const supabase = await createClient();
+  if (!supabase) return <PageHeading title="Visits" description="Your school visits will appear here." />;
+  const [{ data: visits }, { data: assessments }] = await Promise.all([
+    supabase.from("school_visits").select("id, application_id, status, scheduled_at, proposed_at, instructions, created_at").eq("parent_id", user.id).order("created_at", { ascending: false }),
+    supabase.from("school_assessments").select("id, application_id, assessment_type, status, scheduled_at, location, instructions").eq("parent_id", user.id).eq("parent_visible", true).order("scheduled_at"),
+  ]);
+  const ids = [...new Set([...(visits ?? []).map((v) => v.application_id), ...(assessments ?? []).map((a) => a.application_id)])];
+  const { data: apps } = ids.length ? await supabase.from("admission_applications").select("id, application_number, school_id, class_name").in("id", ids) : { data: [] };
+  const schoolIds = [...new Set((apps ?? []).map((a) => a.school_id))];
+  const { data: schools } = schoolIds.length ? await supabase.from("public_school_profiles").select("id, name").in("id", schoolIds) : { data: [] };
+  const any = Boolean(visits?.length || assessments?.length);
+  return <><PageHeading eyebrow="Family workspace" title="Visits & assessments" description="See requested visits, confirmed times and school assessments linked to your applications." /><div className="mt-7">{any ? <div className="space-y-3">{(visits ?? []).map((visit) => { const app = apps?.find((a) => a.id === visit.application_id); const school = schools?.find((s) => s.id === app?.school_id); return <article key={visit.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-extrabold text-[#0e2946]">{school?.name ?? "School"} · Visit</h2><p className="mt-1 text-xs text-slate-500">{app?.application_number ?? "Application"} · {app?.class_name ?? ""}</p></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold capitalize text-emerald-900">{visit.status.replaceAll("_", " ")}</span></div><p className="mt-3 text-sm text-slate-700">{visit.scheduled_at || visit.proposed_at ? new Date(visit.scheduled_at ?? visit.proposed_at!).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" }) : "Awaiting confirmation from the school"}</p>{visit.instructions && <p className="mt-2 whitespace-pre-line text-sm leading-5 text-slate-600">{visit.instructions}</p>}<Link href={`/parent/applications/${visit.application_id}`} className="mt-3 inline-block text-sm font-bold text-emerald-800 underline">Open application</Link></article>; })}{(assessments ?? []).map((item) => { const app = apps?.find((a) => a.id === item.application_id); const school = schools?.find((s) => s.id === app?.school_id); return <article key={item.id} className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-extrabold capitalize text-indigo-950">{school?.name ?? "School"} · {item.assessment_type}</h2><p className="mt-1 text-xs text-indigo-800">{app?.application_number ?? "Application"}</p></div><span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold capitalize text-indigo-900">{item.status}</span></div><p className="mt-3 text-sm text-indigo-950">{new Date(item.scheduled_at).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}{item.location ? ` · ${item.location}` : ""}</p>{item.instructions && <p className="mt-2 text-sm text-indigo-950">{item.instructions}</p>}<Link href={`/parent/applications/${item.application_id}`} className="mt-3 inline-block text-sm font-bold text-indigo-900 underline">Open application</Link></article>; })}</div> : <EmptyState icon={CalendarDays} title="No visits or assessments yet" description="Once a school schedules a real visit or assessment against one of your applications, it will appear here." />}</div></>;
+}

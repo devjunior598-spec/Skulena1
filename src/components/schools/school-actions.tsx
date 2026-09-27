@@ -60,6 +60,7 @@ export function SaveButton({ slug, name = "school", ...props }: ActionAppearance
 
 export function ShareButton({ name = "school", url, className, variant = "outline", size }: ActionAppearance & { name?: string; url?: string }) {
   const [copied, setCopied] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -67,9 +68,20 @@ export function ShareButton({ name = "school", url, className, variant = "outlin
   async function share() {
     const link = url ? new URL(url, window.location.origin).href : window.location.href;
     setShareUrl(link);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: name, text: `Explore ${name} on Skulena`, url: link });
+        setAnnouncement("Sharing options opened.");
+        setCopied(false);
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
+      setAnnouncement("School profile link copied to clipboard.");
     } catch {
       dialog.current?.showModal();
       requestAnimationFrame(() => input.current?.select());
@@ -80,7 +92,7 @@ export function ShareButton({ name = "school", url, className, variant = "outlin
       <Button type="button" variant={variant} size={size} className={className} onClick={share} aria-label={`Share ${name}`}>
         {copied ? <Check className="size-4" aria-hidden="true" /> : <Share2 className="size-4" aria-hidden="true" />}{copied ? "Link copied" : "Share"}
       </Button>
-      <span className="sr-only" role="status">{copied ? "Link copied to clipboard." : ""}</span>
+      <span className="sr-only" role="status">{announcement}</span>
       <dialog ref={dialog} aria-labelledby={`${id}-title`} className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-md rounded-3xl border border-slate-200 bg-white p-6 text-[#0e2946] shadow-2xl backdrop:bg-slate-950/45">
         <h2 id={`${id}-title`} className="text-xl font-extrabold">Share {name}</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">Automatic copying is unavailable in this browser. Select and copy this link to share it.</p>
